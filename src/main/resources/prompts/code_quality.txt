@@ -1,0 +1,24 @@
+Review the code quality of this repository.
+
+## Evidence
+{{evidence}}
+
+## Representative Code
+{{context_chunks}}
+
+{{file_contents}}
+
+## Instructions
+Assess code quality covering:
+1. **Naming Conventions**: Are names clear and consistent?
+2. **Code Organization**: Is code well-structured and modular?
+3. **Error Handling**: Are errors handled properly?
+4. **Code Duplication**: Signs of copy-paste or DRY violations?
+5. **Complexity**: Overly complex functions or classes?
+6. **Type Safety**: Proper use of types (especially for Kotlin/TypeScript)?
+7. **Documentation**: Adequate comments and documentation?
+8. **Testing**: Test quality and coverage patterns?
+9. **Anti-patterns**: Specific anti-patterns found?
+10. **Tech Debt**: Areas that need refactoring?
+
+For each issue, provide the specific file/location and a concrete fix suggestion.

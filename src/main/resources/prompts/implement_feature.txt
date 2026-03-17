@@ -1,0 +1,35 @@
+Implement a new feature for this repository.
+
+## Evidence
+{{evidence}}
+
+## Existing Code Context
+{{context_chunks}}
+
+{{file_contents}}
+
+## Feature Request
+{{user_input}}
+
+## Instructions
+Generate code following the ANALYZE_THEN_GENERATE approach:
+
+1. **Analysis**: First, describe:
+   - Which existing files need modification
+   - Which new files need creation
+   - How the feature integrates with existing architecture
+   - What conventions to follow (naming, patterns, framework usage)
+
+2. **Implementation**: Then provide complete code:
+   - Use the same language, style, and patterns as existing code
+   - Include all necessary imports
+   - Handle errors consistently with existing error handling
+   - Add appropriate comments
+   - Follow the project's testing patterns
+
+3. **Integration Notes**: Explain:
+   - Where each file goes in the project structure
+   - Any configuration changes needed
+   - How to test the new feature
+
+Generate production-ready code. No placeholders or TODOs.

@@ -1,0 +1,25 @@
+Perform a security review of this repository.
+
+## Evidence
+{{evidence}}
+
+## Representative Code
+{{context_chunks}}
+
+{{file_contents}}
+
+## Instructions
+Conduct a security audit covering:
+1. **Dependency Vulnerabilities**: Known vulnerable dependencies?
+2. **Authentication**: How is auth implemented? Issues?
+3. **Authorization**: Access control patterns?
+4. **Input Validation**: Are inputs properly validated and sanitized?
+5. **Secrets Management**: Hardcoded secrets, API keys, passwords?
+6. **SQL Injection**: Parameterized queries used?
+7. **XSS/CSRF**: Web security protections?
+8. **Data Exposure**: Sensitive data in logs, responses, or errors?
+9. **Configuration**: Secure defaults? Production-safe configs?
+10. **Recommendations**: Prioritized list of security fixes
+
+Rate each finding: CRITICAL, HIGH, MEDIUM, LOW.
+Provide specific file paths and line references where possible.

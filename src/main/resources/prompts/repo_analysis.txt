@@ -1,0 +1,24 @@
+Analyze this repository based on the evidence collected.
+
+## Evidence
+{{evidence}}
+
+## Representative Code
+{{context_chunks}}
+
+{{file_contents}}
+
+## Instructions
+Provide a comprehensive repository analysis covering:
+1. **Project Purpose**: What does this project do?
+2. **Tech Stack**: Languages, frameworks, key libraries
+3. **Architecture**: How is the code organized? What patterns are used?
+4. **Build System**: How to build and run the project
+5. **Key Components**: Most important modules and their responsibilities
+6. **Dependencies**: External dependencies and their roles
+7. **Testing**: Test framework and coverage approach
+8. **CI/CD**: Deployment and automation setup (if any)
+9. **Code Quality**: Initial observations about code quality
+10. **Entry Points**: Main entry points and how to navigate the codebase
+
+Base your analysis ONLY on the evidence provided. Do not invent details.

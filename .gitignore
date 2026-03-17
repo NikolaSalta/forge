@@ -1,0 +1,27 @@
+# Build outputs
+build/
+.gradle/
+out/
+
+# IDE
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Forge workspace databases (large binary files)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# User config (may contain local paths)
+forge.yaml
+
+# Whisper models
+models/
+
+# Logs
+*.log

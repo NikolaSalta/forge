@@ -1,0 +1,4 @@
+Summarize the following content concisely. Focus on the key points and most important details. Be accurate and avoid adding information not present in the text.
+
+Content to summarize:
+{{text}}

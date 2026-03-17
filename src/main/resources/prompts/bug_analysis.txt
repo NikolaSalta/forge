@@ -1,0 +1,26 @@
+Analyze and diagnose a bug in this repository.
+
+## Evidence
+{{evidence}}
+
+## Relevant Code
+{{context_chunks}}
+
+{{file_contents}}
+
+## Bug Report
+{{user_input}}
+
+## Instructions
+Diagnose this bug following a systematic approach:
+
+1. **Symptom Analysis**: What exactly is the reported behavior?
+2. **Root Cause Investigation**: Trace through the code to find the cause
+3. **Affected Components**: Which files and functions are involved?
+4. **Reproduction Steps**: How to reliably reproduce this bug
+5. **Fix Proposal**: Specific code changes to fix the bug
+6. **Side Effects**: Could the fix break anything else?
+7. **Test Suggestion**: How to test that the fix works
+8. **Prevention**: How to prevent similar bugs in the future
+
+Reference specific file paths, function names, and line numbers from the evidence.

@@ -1,0 +1,24 @@
+Review the architecture of this repository.
+
+## Evidence
+{{evidence}}
+
+## Representative Code
+{{context_chunks}}
+
+{{file_contents}}
+
+## Instructions
+Provide a detailed architecture review covering:
+1. **High-Level Architecture**: Overall system design and major components
+2. **Design Patterns**: Patterns used (MVC, MVVM, Clean, Hexagonal, etc.)
+3. **Module Structure**: How modules/packages are organized
+4. **Dependency Graph**: Key dependencies between modules
+5. **Data Flow**: How data flows through the system
+6. **API Boundaries**: External and internal API surfaces
+7. **Separation of Concerns**: How well responsibilities are separated
+8. **Scalability Considerations**: Potential bottlenecks
+9. **Strengths**: What the architecture does well
+10. **Improvement Suggestions**: Specific, actionable recommendations
+
+Focus on architectural decisions and their trade-offs. Be specific with file paths and module names.
