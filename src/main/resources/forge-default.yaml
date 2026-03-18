@@ -55,7 +55,7 @@ ui:
   streaming: true
 
 intellij:
-  enabled: false
+  enabled: true
   module_priorities:
     - "platform/platform-api"
     - "platform/platform-impl"

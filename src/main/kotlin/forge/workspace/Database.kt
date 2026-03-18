@@ -1073,16 +1073,13 @@ class Database(workspacePath: Path) {
         synchronized(lock) {
             val conn = getConnection()
             val placeholders = moduleIds.joinToString(",") { "?" }
-            // Distribute limit evenly across modules for balanced sampling
-            val perModuleLimit = (limit / moduleIds.size).coerceAtLeast(100)
-            val queries = moduleIds.mapIndexed { i, id ->
-                "SELECT c.* FROM chunks c JOIN files f ON c.file_id = f.id WHERE f.module_id = ? AND c.embedding IS NOT NULL AND length(c.embedding) > 0 ORDER BY c.id DESC LIMIT $perModuleLimit"
-            }
-            val sql = queries.joinToString(" UNION ALL ")
+            val sql = """SELECT c.* FROM chunks c JOIN files f ON c.file_id = f.id
+                WHERE f.module_id IN ($placeholders) AND c.embedding IS NOT NULL
+                AND length(c.embedding) > 0
+                LIMIT ?"""
             conn.prepareStatement(sql).use { ps ->
-                moduleIds.forEachIndexed { i, _ ->
-                    ps.setInt(i + 1, moduleIds[i])
-                }
+                moduleIds.forEachIndexed { i, id -> ps.setInt(i + 1, id) }
+                ps.setInt(moduleIds.size + 1, limit)
                 ps.executeQuery().use { rs ->
                     return rs.toChunkRecords()
                 }
