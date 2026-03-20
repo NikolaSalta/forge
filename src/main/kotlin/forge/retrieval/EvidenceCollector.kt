@@ -32,7 +32,8 @@ enum class EvidenceCategory {
     EXTENSION_POINTS,
     MODULE_GRAPH,
     SERVICES,
-    PSI_PATTERNS
+    PSI_PATTERNS,
+    MONOREPO_STRUCTURE
 }
 
 /**
@@ -105,7 +106,8 @@ class EvidenceCollector {
                 EvidenceCategory.EXTENSION_POINTS,
                 EvidenceCategory.MODULE_GRAPH,
                 EvidenceCategory.SERVICES,
-                EvidenceCategory.PSI_PATTERNS
+                EvidenceCategory.PSI_PATTERNS,
+                EvidenceCategory.MONOREPO_STRUCTURE
             ),
             TaskType.PROJECT_OVERVIEW to setOf(
                 EvidenceCategory.BUILD_SYSTEM,
@@ -351,6 +353,7 @@ class EvidenceCollector {
                 EvidenceCategory.MODULE_GRAPH -> detectModuleGraph(taskId, db)
                 EvidenceCategory.SERVICES -> detectServices(taskId, db)
                 EvidenceCategory.PSI_PATTERNS -> detectPsiPatterns(taskId, db)
+                EvidenceCategory.MONOREPO_STRUCTURE -> detectMonorepoStructure(taskId, db, resolvedRoot)
             }
             if (count > 0) {
                 collectedCategories.add(category.name)
@@ -1171,6 +1174,245 @@ class EvidenceCollector {
             )
             count++
         }
+        return count
+    }
+
+    // -----------------------------------------------------------------------
+    //  Monorepo structure discovery
+    // -----------------------------------------------------------------------
+
+    /**
+     * Discovers monorepo/multi-service structure by scanning top-level
+     * directories for build files, Dockerfiles, and source code.
+     * Emits per-service evidence: directory, language, build system, Docker presence.
+     */
+    private fun detectMonorepoStructure(taskId: String, db: Database, repoPath: Path): Int {
+        var count = 0
+
+        // Scan top-level directories
+        val topLevelDirs = try {
+            Files.list(repoPath).use { stream ->
+                stream.filter { Files.isDirectory(it) }
+                    .filter { !it.fileName.toString().startsWith(".") }
+                    .filter { it.fileName.toString() !in setOf("node_modules", ".git", "__pycache__", "build", "dist", ".idea", ".vscode", "target", ".gradle") }
+                    .toList()
+            }
+        } catch (_: Exception) { return 0 }
+
+        val services = mutableListOf<String>()
+
+        for (dir in topLevelDirs) {
+            val dirName = dir.fileName.toString()
+            val info = mutableListOf<String>()
+
+            // Check for build files
+            for ((buildFile, system) in BUILD_FILE_TO_SYSTEM) {
+                if (Files.exists(dir.resolve(buildFile))) {
+                    info.add("build=$system")
+                }
+            }
+
+            // Check for Dockerfile
+            val hasDockerfile = Files.exists(dir.resolve("Dockerfile")) ||
+                Files.exists(dir.resolve("dockerfile"))
+            if (hasDockerfile) info.add("docker=yes")
+
+            // Check for docker-compose
+            val hasCompose = Files.exists(dir.resolve("docker-compose.yml")) ||
+                Files.exists(dir.resolve("docker-compose.yaml"))
+            if (hasCompose) info.add("compose=yes")
+
+            // Check for requirements.txt (Python)
+            if (Files.exists(dir.resolve("requirements.txt"))) info.add("build=pip")
+
+            // Detect primary language from source files in DB
+            val filesInDir = db.getFilesByCategory("source").filter {
+                it.relativePath.startsWith("$dirName/")
+            }
+            if (filesInDir.isNotEmpty()) {
+                val langCounts = mutableMapOf<String, Int>()
+                for (file in filesInDir) {
+                    val ext = file.relativePath.substringAfterLast('.', "").lowercase()
+                    val lang = EXTENSION_TO_LANGUAGE_NAME[ext] ?: continue
+                    langCounts[lang] = (langCounts[lang] ?: 0) + 1
+                }
+                val topLang = langCounts.maxByOrNull { it.value }
+                if (topLang != null) info.add("lang=${topLang.key}(${topLang.value})")
+                info.add("files=${filesInDir.size}")
+            }
+
+            // Scan sub-directories (2nd level) for nested services
+            val subDirs = try {
+                Files.list(dir).use { stream ->
+                    stream.filter { Files.isDirectory(it) }
+                        .filter { !it.fileName.toString().startsWith(".") }
+                        .filter { it.fileName.toString() !in setOf("node_modules", ".git", "__pycache__", "build", "dist", "target", "src") }
+                        .toList()
+                }
+            } catch (_: Exception) { emptyList() }
+
+            val subServices = mutableListOf<String>()
+            for (subDir in subDirs) {
+                val subName = subDir.fileName.toString()
+                val subHasBuild = BUILD_FILE_TO_SYSTEM.keys.any { Files.exists(subDir.resolve(it)) } ||
+                    Files.exists(subDir.resolve("requirements.txt"))
+                val subHasDocker = Files.exists(subDir.resolve("Dockerfile"))
+                val subHasSrc = Files.exists(subDir.resolve("src")) || Files.exists(subDir.resolve("app"))
+
+                if (subHasBuild || subHasDocker || subHasSrc) {
+                    val subInfo = mutableListOf<String>()
+                    if (subHasDocker) subInfo.add("docker=yes")
+                    // Detect build system
+                    for ((bf, sys) in BUILD_FILE_TO_SYSTEM) {
+                        if (Files.exists(subDir.resolve(bf))) { subInfo.add("build=$sys"); break }
+                    }
+                    if (Files.exists(subDir.resolve("requirements.txt"))) subInfo.add("build=pip")
+
+                    // Detect language from sub-dir source files
+                    val subFiles = db.getFilesByCategory("source").filter {
+                        it.relativePath.startsWith("$dirName/$subName/")
+                    }
+                    if (subFiles.isNotEmpty()) {
+                        val sLangCounts = mutableMapOf<String, Int>()
+                        for (f in subFiles) {
+                            val ext = f.relativePath.substringAfterLast('.', "").lowercase()
+                            val lang = EXTENSION_TO_LANGUAGE_NAME[ext] ?: continue
+                            sLangCounts[lang] = (sLangCounts[lang] ?: 0) + 1
+                        }
+                        val sTopLang = sLangCounts.maxByOrNull { it.value }
+                        if (sTopLang != null) subInfo.add("lang=${sTopLang.key}(${sTopLang.value})")
+                        subInfo.add("files=${subFiles.size}")
+                    }
+
+                    subServices.add(subName)
+
+                    // Emit individual sub-service evidence item
+                    val subDesc = "$dirName/$subName: ${subInfo.joinToString(", ")}"
+                    db.insertEvidence(taskId, EvidenceCategory.MONOREPO_STRUCTURE.name, "sub_service", subDesc)
+                    count++
+
+                    // Also check for 3rd-level nested services (e.g. packages/backend/server-be)
+                    val nestedDirs = try {
+                        Files.list(subDir).use { s ->
+                            s.filter { Files.isDirectory(it) }
+                                .filter { !it.fileName.toString().startsWith(".") }
+                                .filter { it.fileName.toString() !in setOf("node_modules", "build", "dist", "target", "src", "test", "__pycache__", ".git") }
+                                .toList()
+                        }
+                    } catch (_: Exception) { emptyList() }
+
+                    for (nestedDir in nestedDirs) {
+                        val nestedName = nestedDir.fileName.toString()
+                        val nHasBuild = BUILD_FILE_TO_SYSTEM.keys.any { Files.exists(nestedDir.resolve(it)) } ||
+                            Files.exists(nestedDir.resolve("requirements.txt"))
+                        val nHasDocker = Files.exists(nestedDir.resolve("Dockerfile"))
+                        val nHasSrc = Files.exists(nestedDir.resolve("src")) || Files.exists(nestedDir.resolve("app"))
+
+                        if (nHasBuild || nHasDocker || nHasSrc) {
+                            val nInfo = mutableListOf<String>()
+                            if (nHasDocker) nInfo.add("docker=yes")
+                            for ((bf, sys) in BUILD_FILE_TO_SYSTEM) {
+                                if (Files.exists(nestedDir.resolve(bf))) { nInfo.add("build=$sys"); break }
+                            }
+                            if (Files.exists(nestedDir.resolve("requirements.txt"))) nInfo.add("build=pip")
+                            val nFiles = db.getFilesByCategory("source").filter {
+                                it.relativePath.startsWith("$dirName/$subName/$nestedName/")
+                            }
+                            if (nFiles.isNotEmpty()) {
+                                val nLang = mutableMapOf<String, Int>()
+                                for (f in nFiles) {
+                                    val ext = f.relativePath.substringAfterLast('.', "").lowercase()
+                                    val lang = EXTENSION_TO_LANGUAGE_NAME[ext] ?: continue
+                                    nLang[lang] = (nLang[lang] ?: 0) + 1
+                                }
+                                val nTop = nLang.maxByOrNull { it.value }
+                                if (nTop != null) nInfo.add("lang=${nTop.key}(${nTop.value})")
+                                nInfo.add("files=${nFiles.size}")
+                            }
+                            val nDesc = "$dirName/$subName/$nestedName: ${nInfo.joinToString(", ")}"
+                            db.insertEvidence(taskId, EvidenceCategory.MONOREPO_STRUCTURE.name, "sub_service", nDesc)
+                            count++
+                        }
+                    }
+                }
+            }
+
+            // Only record directories that look like services/modules
+            if (info.isNotEmpty() || subServices.isNotEmpty()) {
+                val description = buildString {
+                    append(dirName)
+                    if (info.isNotEmpty()) append(": ${info.joinToString(", ")}")
+                    if (subServices.isNotEmpty()) {
+                        append(" | sub-modules(${subServices.size}): ${subServices.joinToString(", ")}")
+                    }
+                }
+                db.insertEvidence(taskId, EvidenceCategory.MONOREPO_STRUCTURE.name, "service_dir", description)
+                services.add(dirName)
+                count++
+            }
+        }
+
+        // Summary entry
+        if (services.isNotEmpty()) {
+            db.insertEvidence(
+                taskId,
+                EvidenceCategory.MONOREPO_STRUCTURE.name,
+                "monorepo_summary",
+                "Found ${services.size} top-level service directories: ${services.joinToString(", ")}"
+            )
+            count++
+        }
+
+        // Check for workspace config files (pnpm, yarn, lerna, nx, turborepo)
+        val workspaceMarkers = mapOf(
+            "pnpm-workspace.yaml" to "pnpm workspaces",
+            "lerna.json" to "Lerna",
+            "nx.json" to "Nx",
+            "turbo.json" to "Turborepo",
+            "rush.json" to "Rush"
+        )
+        for ((marker, name) in workspaceMarkers) {
+            if (Files.exists(repoPath.resolve(marker))) {
+                db.insertEvidence(taskId, EvidenceCategory.MONOREPO_STRUCTURE.name, "workspace_manager", name)
+                count++
+            }
+        }
+
+        // Check for root docker-compose files
+        val composeFiles = listOf("docker-compose.yml", "docker-compose.yaml",
+            "docker-compose.dev.yml", "docker-compose.prod.yml")
+        for (composeFile in composeFiles) {
+            if (Files.exists(repoPath.resolve(composeFile))) {
+                // Try to extract service names from compose file
+                try {
+                    val content = Files.readString(repoPath.resolve(composeFile))
+                    val serviceNames = mutableListOf<String>()
+                    var inServices = false
+                    for (line in content.lines()) {
+                        if (line.trimStart().startsWith("services:")) {
+                            inServices = true
+                            continue
+                        }
+                        if (inServices && line.isNotBlank() && !line.startsWith(" ") && !line.startsWith("\t")) {
+                            inServices = false
+                        }
+                        if (inServices && line.matches(Regex("^  [a-zA-Z][a-zA-Z0-9_-]*:.*"))) {
+                            serviceNames.add(line.trim().removeSuffix(":"))
+                        }
+                    }
+                    if (serviceNames.isNotEmpty()) {
+                        db.insertEvidence(
+                            taskId,
+                            EvidenceCategory.MONOREPO_STRUCTURE.name,
+                            "docker_compose_services",
+                            "$composeFile: ${serviceNames.joinToString(", ")}"
+                        )
+                        count++
+                    }
+                } catch (_: Exception) { }
+            }
+        }
+
         return count
     }
 }

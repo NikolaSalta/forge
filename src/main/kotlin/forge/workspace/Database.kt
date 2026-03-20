@@ -223,7 +223,8 @@ class Database(workspacePath: Path) {
                 value       TEXT NOT NULL,
                 confidence  REAL DEFAULT 1.0,
                 source_file TEXT,
-                created_at  TEXT
+                created_at  TEXT,
+                UNIQUE(task_id, category, key, value)
             )
             """.trimIndent()
         )
@@ -294,6 +295,87 @@ class Database(workspacePath: Path) {
                 plugin_xml_path     TEXT
             )
         """.trimIndent())
+
+        // ── Model Evolution tables ──────────────────────────────
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS training_data (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id      TEXT,
+                task_id         TEXT REFERENCES tasks(id),
+                input_prompt    TEXT NOT NULL,
+                system_prompt   TEXT,
+                output_response TEXT NOT NULL,
+                task_type       TEXT,
+                model_used      TEXT,
+                quality_score   REAL DEFAULT 0.0,
+                user_rating     INTEGER,
+                is_validated    INTEGER DEFAULT 0,
+                is_exported     INTEGER DEFAULT 0,
+                tags            TEXT,
+                created_at      TEXT,
+                validated_at    TEXT
+            )
+        """.trimIndent())
+
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS model_registry (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                name            TEXT UNIQUE NOT NULL,
+                base_model      TEXT NOT NULL,
+                version         TEXT NOT NULL,
+                status          TEXT DEFAULT 'draft',
+                modelfile_path  TEXT,
+                adapter_path    TEXT,
+                training_run_id TEXT,
+                metrics_json    TEXT,
+                created_at      TEXT,
+                activated_at    TEXT
+            )
+        """.trimIndent())
+
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS training_runs (
+                id              TEXT PRIMARY KEY,
+                model_name      TEXT,
+                dataset_version TEXT NOT NULL,
+                dataset_size    INTEGER,
+                method          TEXT,
+                hyperparams     TEXT,
+                eval_metrics    TEXT,
+                status          TEXT DEFAULT 'planned',
+                started_at      TEXT,
+                completed_at    TEXT
+            )
+        """.trimIndent())
+
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS dataset_exports (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                version         TEXT NOT NULL,
+                format          TEXT NOT NULL,
+                record_count    INTEGER,
+                file_path       TEXT,
+                quality_min     REAL,
+                created_at      TEXT
+            )
+        """.trimIndent())
+
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS prompt_partitions (
+                id             TEXT PRIMARY KEY,
+                request_id     TEXT NOT NULL,
+                task_id        TEXT REFERENCES tasks(id),
+                semantic_label TEXT,
+                archetype      TEXT,
+                task_type      TEXT,
+                sub_prompt     TEXT,
+                depends_on     TEXT,
+                status         TEXT,
+                result_summary TEXT,
+                duration_ms    INTEGER,
+                created_at     TEXT DEFAULT (datetime('now'))
+            )
+        """.trimIndent())
     }
 
     private fun createIndexes(stmt: Statement) {
@@ -307,6 +389,12 @@ class Database(workspacePath: Path) {
         stmt.execute("CREATE INDEX IF NOT EXISTS idx_ep_module_id      ON extension_points(module_id)")
         stmt.execute("CREATE INDEX IF NOT EXISTS idx_ep_impl_ep_id     ON ep_implementations(extension_point_id)")
         stmt.execute("CREATE INDEX IF NOT EXISTS idx_ep_impl_mod_id    ON ep_implementations(module_id)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_pp_request_id     ON prompt_partitions(request_id)")
+        // Model Evolution indexes
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_td_task_id        ON training_data(task_id)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_td_quality        ON training_data(quality_score)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_td_validated      ON training_data(is_validated)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_mr_status         ON model_registry(status)")
     }
 
     private fun migrateFilesTable() {
@@ -521,7 +609,7 @@ class Database(workspacePath: Path) {
         synchronized(lock) {
             val conn = getConnection()
             val sql = """
-                INSERT INTO evidence (task_id, category, key, value, confidence, source_file, created_at)
+                INSERT OR IGNORE INTO evidence (task_id, category, key, value, confidence, source_file, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """.trimIndent()
             conn.prepareStatement(sql).use { ps ->
@@ -899,6 +987,28 @@ class Database(workspacePath: Path) {
             val conn = getConnection()
             val rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM modules")
             return if (rs.next()) rs.getInt(1) else 0
+        }
+    }
+
+    fun getDistinctModuleTypeCount(): Int {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(DISTINCT module_type) FROM modules").use { rs ->
+                    return if (rs.next()) rs.getInt(1) else 0
+                }
+            }
+        }
+    }
+
+    fun getEmbeddingCount(): Int {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(*) FROM chunks WHERE embedding IS NOT NULL AND length(embedding) > 0").use { rs ->
+                    return if (rs.next()) rs.getInt(1) else 0
+                }
+            }
         }
     }
 
@@ -1281,5 +1391,289 @@ class Database(workspacePath: Path) {
             )
         }
         return records
+    }
+
+    // ── Training Data CRUD (Model Evolution) ─────────────────
+
+    fun insertTrainingData(
+        sessionId: String?,
+        taskId: String?,
+        inputPrompt: String,
+        systemPrompt: String?,
+        outputResponse: String,
+        taskType: String?,
+        modelUsed: String?,
+        qualityScore: Double = 0.0,
+        isValidated: Boolean = false
+    ): Int {
+        synchronized(lock) {
+            val conn = getConnection()
+            val sql = """
+                INSERT INTO training_data
+                (session_id, task_id, input_prompt, system_prompt, output_response, task_type, model_used, quality_score, is_validated, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """.trimIndent()
+            conn.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS).use { ps ->
+                ps.setString(1, sessionId)
+                ps.setString(2, taskId)
+                ps.setString(3, inputPrompt)
+                ps.setString(4, systemPrompt)
+                ps.setString(5, outputResponse)
+                ps.setString(6, taskType)
+                ps.setString(7, modelUsed)
+                ps.setDouble(8, qualityScore)
+                ps.setInt(9, if (isValidated) 1 else 0)
+                ps.setString(10, Instant.now().toString())
+                ps.executeUpdate()
+                ps.generatedKeys.use { rs ->
+                    return if (rs.next()) rs.getInt(1) else -1
+                }
+            }
+        }
+    }
+
+    fun getTrainingDataCount(): Int {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(*) FROM training_data").use { rs ->
+                    return if (rs.next()) rs.getInt(1) else 0
+                }
+            }
+        }
+    }
+
+    fun getValidatedTrainingDataCount(): Int {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(*) FROM training_data WHERE is_validated = 1").use { rs ->
+                    return if (rs.next()) rs.getInt(1) else 0
+                }
+            }
+        }
+    }
+
+    fun updateTrainingDataRating(id: Int, rating: Int) {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("UPDATE training_data SET user_rating = ?, is_validated = 1, validated_at = ? WHERE id = ?").use { ps ->
+                ps.setInt(1, rating)
+                ps.setString(2, Instant.now().toString())
+                ps.setInt(3, id)
+                ps.executeUpdate()
+            }
+        }
+    }
+
+    fun getTrainingDataForExport(minQuality: Double, limit: Int = 10000): List<Map<String, Any?>> {
+        synchronized(lock) {
+            val conn = getConnection()
+            val results = mutableListOf<Map<String, Any?>>()
+            conn.prepareStatement("""
+                SELECT id, input_prompt, system_prompt, output_response, task_type, model_used, quality_score, user_rating
+                FROM training_data
+                WHERE is_validated = 1 AND quality_score >= ? AND is_exported = 0
+                ORDER BY quality_score DESC
+                LIMIT ?
+            """.trimIndent()).use { ps ->
+                ps.setDouble(1, minQuality)
+                ps.setInt(2, limit)
+                ps.executeQuery().use { rs ->
+                    while (rs.next()) {
+                        results.add(mapOf(
+                            "id" to rs.getInt("id"),
+                            "input" to rs.getString("input_prompt"),
+                            "system" to rs.getString("system_prompt"),
+                            "output" to rs.getString("output_response"),
+                            "task_type" to rs.getString("task_type"),
+                            "model" to rs.getString("model_used"),
+                            "quality" to rs.getDouble("quality_score"),
+                            "rating" to rs.getInt("user_rating")
+                        ))
+                    }
+                }
+            }
+            return results
+        }
+    }
+
+    fun getTrainingDataPaginated(page: Int = 0, pageSize: Int = 20): List<Map<String, Any?>> {
+        synchronized(lock) {
+            val conn = getConnection()
+            val results = mutableListOf<Map<String, Any?>>()
+            conn.prepareStatement("""
+                SELECT id, input_prompt, output_response, task_type, model_used,
+                       quality_score, user_rating, is_validated, created_at
+                FROM training_data
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+            """.trimIndent()).use { ps ->
+                ps.setInt(1, pageSize)
+                ps.setInt(2, page * pageSize)
+                ps.executeQuery().use { rs ->
+                    while (rs.next()) {
+                        results.add(mapOf(
+                            "id" to rs.getInt("id"),
+                            "input" to rs.getString("input_prompt"),
+                            "output" to rs.getString("output_response"),
+                            "task_type" to rs.getString("task_type"),
+                            "model_used" to rs.getString("model_used"),
+                            "quality" to rs.getDouble("quality_score"),
+                            "user_rating" to rs.getObject("user_rating"),
+                            "is_validated" to (rs.getInt("is_validated") == 1),
+                            "created_at" to rs.getString("created_at")
+                        ))
+                    }
+                }
+            }
+            return results
+        }
+    }
+
+    fun markTrainingDataExported(ids: List<Int>) {
+        if (ids.isEmpty()) return
+        synchronized(lock) {
+            val conn = getConnection()
+            val placeholders = ids.joinToString(",") { "?" }
+            conn.prepareStatement("UPDATE training_data SET is_exported = 1 WHERE id IN ($placeholders)").use { ps ->
+                ids.forEachIndexed { idx, id -> ps.setInt(idx + 1, id) }
+                ps.executeUpdate()
+            }
+        }
+    }
+
+    // ── Model Registry CRUD ──────────────────────────────────
+
+    fun insertModelRegistryEntry(
+        name: String,
+        baseModel: String,
+        version: String,
+        status: String = "draft",
+        modelfilePath: String? = null
+    ): Int {
+        synchronized(lock) {
+            val conn = getConnection()
+            val sql = """
+                INSERT OR REPLACE INTO model_registry (name, base_model, version, status, modelfile_path, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """.trimIndent()
+            conn.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS).use { ps ->
+                ps.setString(1, name)
+                ps.setString(2, baseModel)
+                ps.setString(3, version)
+                ps.setString(4, status)
+                ps.setString(5, modelfilePath)
+                ps.setString(6, Instant.now().toString())
+                ps.executeUpdate()
+                ps.generatedKeys.use { rs ->
+                    return if (rs.next()) rs.getInt(1) else -1
+                }
+            }
+        }
+    }
+
+    fun getActiveModel(): Map<String, String>? {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT name, base_model, version, activated_at FROM model_registry WHERE status = 'active' LIMIT 1").use { rs ->
+                    if (rs.next()) {
+                        return mapOf(
+                            "name" to rs.getString("name"),
+                            "base_model" to rs.getString("base_model"),
+                            "version" to rs.getString("version"),
+                            "activated_at" to (rs.getString("activated_at") ?: "")
+                        )
+                    }
+                    return null
+                }
+            }
+        }
+    }
+
+    fun activateModel(name: String) {
+        synchronized(lock) {
+            val conn = getConnection()
+            // Retire current active model
+            conn.createStatement().use { stmt ->
+                stmt.executeUpdate("UPDATE model_registry SET status = 'retired' WHERE status = 'active'")
+            }
+            // Activate the new one
+            conn.prepareStatement("UPDATE model_registry SET status = 'active', activated_at = ? WHERE name = ?").use { ps ->
+                ps.setString(1, Instant.now().toString())
+                ps.setString(2, name)
+                ps.executeUpdate()
+            }
+        }
+    }
+
+    fun rollbackModel(): String? {
+        synchronized(lock) {
+            val conn = getConnection()
+            // Find the most recently retired model
+            val retired = conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT name FROM model_registry WHERE status = 'retired' ORDER BY activated_at DESC LIMIT 1").use { rs ->
+                    if (rs.next()) rs.getString("name") else null
+                }
+            }
+            if (retired != null) {
+                // Mark current active as rollback
+                conn.createStatement().use { stmt ->
+                    stmt.executeUpdate("UPDATE model_registry SET status = 'rollback' WHERE status = 'active'")
+                }
+                // Reactivate the retired one
+                conn.prepareStatement("UPDATE model_registry SET status = 'active', activated_at = ? WHERE name = ?").use { ps ->
+                    ps.setString(1, Instant.now().toString())
+                    ps.setString(2, retired)
+                    ps.executeUpdate()
+                }
+            }
+            return retired
+        }
+    }
+
+    fun insertDatasetExport(version: String, format: String, recordCount: Int, filePath: String, qualityMin: Double) {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("""
+                INSERT INTO dataset_exports (version, format, record_count, file_path, quality_min, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """.trimIndent()).use { ps ->
+                ps.setString(1, version)
+                ps.setString(2, format)
+                ps.setInt(3, recordCount)
+                ps.setString(4, filePath)
+                ps.setDouble(5, qualityMin)
+                ps.setString(6, Instant.now().toString())
+                ps.executeUpdate()
+            }
+        }
+    }
+
+    fun getModelRegistryEntries(): List<Map<String, Any?>> {
+        synchronized(lock) {
+            val conn = getConnection()
+            val results = mutableListOf<Map<String, Any?>>()
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT * FROM model_registry ORDER BY created_at DESC").use { rs ->
+                    while (rs.next()) {
+                        results.add(mapOf(
+                            "id" to rs.getInt("id"),
+                            "name" to rs.getString("name"),
+                            "base_model" to rs.getString("base_model"),
+                            "version" to rs.getString("version"),
+                            "status" to rs.getString("status"),
+                            "modelfile_path" to rs.getString("modelfile_path"),
+                            "adapter_path" to rs.getString("adapter_path"),
+                            "metrics_json" to rs.getString("metrics_json"),
+                            "created_at" to rs.getString("created_at"),
+                            "activated_at" to rs.getString("activated_at")
+                        ))
+                    }
+                }
+            }
+            return results
+        }
     }
 }

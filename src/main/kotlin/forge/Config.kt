@@ -38,7 +38,7 @@ data class WorkspaceConfig(
 )
 
 data class RetrievalConfig(
-    val maxContextChunks: Int = 20,
+    val maxContextChunks: Int = 40,
     val similarityThreshold: Float = 0.65f,
     val embeddingBatchSize: Int = 10,
     val scanIgnore: List<String> = listOf(
@@ -96,8 +96,28 @@ data class ScaleConfig(
     val moduleEmbeddingBudget: Int = 1000,
     val moduleTopK: Int = 5,
     val similaritySearchLimit: Int = 5000,
-    val tokenBudget: Int = 6000,
+    val tokenBudget: Int = 16000,
     val moduleSummaryCache: Boolean = true
+)
+
+data class DecompositionConfig(
+    val enabled: Boolean = true,
+    val maxPartitions: Int = 8,
+    val maxParallelLlmCalls: Int = 3,
+    val synthesisEnabled: Boolean = true,
+    val heuristicOnly: Boolean = false,
+    val sessionTracking: Boolean = true
+)
+
+data class EvolutionConfig(
+    val enabled: Boolean = true,
+    val collectTrainingData: Boolean = true,
+    val autoValidateOnSuccess: Boolean = true,
+    val qualityThreshold: Double = 0.6,
+    val productModel: String? = null,
+    val modelExportDir: String = "~/.forge/models/exports",
+    val datasetFormat: String = "jsonl",
+    val piiFilterEnabled: Boolean = true
 )
 
 data class ForgeConfig(
@@ -109,7 +129,9 @@ data class ForgeConfig(
     val ui: UiConfig = UiConfig(),
     val intellij: IntellijConfig = IntellijConfig(),
     val multiRepo: MultiRepoConfig = MultiRepoConfig(),
-    val scale: ScaleConfig = ScaleConfig()
+    val scale: ScaleConfig = ScaleConfig(),
+    val decomposition: DecompositionConfig = DecompositionConfig(),
+    val evolution: EvolutionConfig = EvolutionConfig()
 ) {
     fun resolvedWorkspaceDir(): Path {
         val dir = workspace.baseDir.replaceFirst("~", System.getProperty("user.home"))
@@ -123,6 +145,11 @@ data class ForgeConfig(
 
     fun resolvedCloneBaseDir(): Path {
         val dir = multiRepo.cloneBaseDir.replaceFirst("~", System.getProperty("user.home"))
+        return Paths.get(dir)
+    }
+
+    fun resolvedModelExportDir(): Path {
+        val dir = evolution.modelExportDir.replaceFirst("~", System.getProperty("user.home"))
         return Paths.get(dir)
     }
 
@@ -175,6 +202,8 @@ data class ForgeConfig(
             val intellijMap = data["intellij"] as? Map<String, Any> ?: emptyMap()
             val multiRepoMap = data["multi_repo"] as? Map<String, Any> ?: emptyMap()
             val scaleMap = data["scale"] as? Map<String, Any> ?: emptyMap()
+            val decompMap = data["decomposition"] as? Map<String, Any> ?: emptyMap()
+            val evolutionMap = data["evolution"] as? Map<String, Any> ?: emptyMap()
             val satellitesList = (multiRepoMap["satellites"] as? List<*>)?.mapNotNull { item ->
                 val m = item as? Map<*, *> ?: return@mapNotNull null
                 SatelliteRepo(
@@ -258,6 +287,24 @@ data class ForgeConfig(
                     similaritySearchLimit = (scaleMap["similarity_search_limit"] as? Number)?.toInt() ?: 5000,
                     tokenBudget = (scaleMap["token_budget"] as? Number)?.toInt() ?: 6000,
                     moduleSummaryCache = scaleMap["module_summary_cache"] as? Boolean ?: true
+                ),
+                decomposition = DecompositionConfig(
+                    enabled = decompMap["enabled"] as? Boolean ?: true,
+                    maxPartitions = (decompMap["max_partitions"] as? Number)?.toInt() ?: 8,
+                    maxParallelLlmCalls = (decompMap["max_parallel_llm_calls"] as? Number)?.toInt() ?: 3,
+                    synthesisEnabled = decompMap["synthesis_enabled"] as? Boolean ?: true,
+                    heuristicOnly = decompMap["heuristic_only"] as? Boolean ?: false,
+                    sessionTracking = decompMap["session_tracking"] as? Boolean ?: true
+                ),
+                evolution = EvolutionConfig(
+                    enabled = evolutionMap["enabled"] as? Boolean ?: true,
+                    collectTrainingData = evolutionMap["collect_training_data"] as? Boolean ?: true,
+                    autoValidateOnSuccess = evolutionMap["auto_validate_on_success"] as? Boolean ?: true,
+                    qualityThreshold = (evolutionMap["quality_threshold"] as? Number)?.toDouble() ?: 0.6,
+                    productModel = evolutionMap["product_model"] as? String,
+                    modelExportDir = evolutionMap["model_export_dir"] as? String ?: "~/.forge/models/exports",
+                    datasetFormat = evolutionMap["dataset_format"] as? String ?: "jsonl",
+                    piiFilterEnabled = evolutionMap["pii_filter_enabled"] as? Boolean ?: true
                 )
             )
         }

@@ -1,0 +1,1831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FORGE v2 — Local AI Code Intelligence</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+    background: #0a0e17;
+    color: #e0e6f0;
+    min-height: 100vh;
+  }
+  .header {
+    background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+    border-bottom: 1px solid #30363d;
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+  .logo {
+    color: #58a6ff;
+    font-size: 11px;
+    line-height: 1.15;
+    white-space: pre;
+  }
+  .header-info h1 {
+    font-size: 18px;
+    color: #f0f6fc;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .header-info p {
+    color: #8b949e;
+    font-size: 12px;
+    margin-top: 2px;
+  }
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .status-ok { background: #0d1f0d; color: #3fb950; border: 1px solid #238636; }
+  .status-warn { background: #1a1500; color: #d29922; border: 1px solid #9e6a03; }
+  .status-err { background: #1f0d0d; color: #f85149; border: 1px solid #da3633; }
+  .status-running { background: #1a1500; color: #d29922; border: 1px solid #9e6a03; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .status-ok .status-dot { background: #3fb950; box-shadow: 0 0 6px #3fb950; }
+  .status-running .status-dot { background: #d29922; animation: pulse 1.5s infinite; }
+  .status-err .status-dot { background: #f85149; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* ===== Navigation Tabs ===== */
+  .nav-tabs {
+    background: #0d1117;
+    border-bottom: 1px solid #30363d;
+    display: flex;
+    padding: 0 32px;
+    gap: 0;
+  }
+  .nav-tab {
+    padding: 12px 20px;
+    font-size: 13px;
+    font-family: inherit;
+    color: #8b949e;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .nav-tab:hover { color: #e0e6f0; background: #161b22; }
+  .nav-tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+  .nav-tab-icon { font-size: 14px; }
+
+  .tab-page { display: none; }
+  .tab-page.active { display: block; }
+
+  .main { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
+
+  /* ===== Path Selector ===== */
+  .path-bar {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .path-icon { font-size: 16px; color: #58a6ff; flex-shrink: 0; }
+  .path-label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; flex-shrink: 0; }
+  .path-value {
+    font-size: 13px;
+    color: #e0e6f0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .path-db-status {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    flex-shrink: 0;
+  }
+  .path-db-ok { background: #0d1f0d; color: #3fb950; border: 1px solid #238636; }
+  .path-db-missing { background: #1a1500; color: #d29922; border: 1px solid #9e6a03; }
+  .path-change-btn {
+    background: #21262d;
+    border: 1px solid #30363d;
+    color: #58a6ff;
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+  .path-change-btn:hover { background: #30363d; border-color: #58a6ff; }
+
+  .path-panel {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
+    display: none;
+  }
+  .path-panel.open { display: block; }
+  .path-panel-header {
+    background: #0d1117;
+    padding: 12px 16px;
+    border-bottom: 1px solid #30363d;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .path-panel-title { font-size: 13px; font-weight: 600; color: #f0f6fc; }
+  .path-panel-close {
+    background: none;
+    border: none;
+    color: #8b949e;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+  }
+  .path-panel-close:hover { color: #f0f6fc; }
+
+  .path-tabs {
+    display: flex;
+    border-bottom: 1px solid #30363d;
+  }
+  .path-tab {
+    padding: 10px 20px;
+    font-size: 12px;
+    font-family: inherit;
+    color: #8b949e;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .path-tab:hover { color: #e0e6f0; }
+  .path-tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+
+  .path-tab-content { padding: 16px; display: none; }
+  .path-tab-content.active { display: block; }
+
+  .workspace-list { list-style: none; }
+  .workspace-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .workspace-item:hover { background: #21262d; border-color: #58a6ff; }
+  .workspace-item.current { background: #0d1f0d; border-color: #238636; }
+  .workspace-icon { font-size: 16px; flex-shrink: 0; }
+  .workspace-info { flex: 1; min-width: 0; }
+  .workspace-path {
+    font-size: 13px;
+    color: #e0e6f0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .workspace-meta { font-size: 11px; color: #8b949e; margin-top: 2px; }
+  .workspace-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    flex-shrink: 0;
+  }
+
+  .custom-path-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .custom-path-input, .input-field {
+    flex: 1;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 10px 14px;
+    color: #e0e6f0;
+    font-family: inherit;
+    font-size: 13px;
+  }
+  .custom-path-input:focus, .input-field:focus { outline: none; border-color: #58a6ff; }
+  .custom-path-input::placeholder, .input-field::placeholder { color: #484f58; }
+
+  .browser-breadcrumb {
+    font-size: 12px;
+    color: #8b949e;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .browser-breadcrumb span {
+    color: #58a6ff;
+    cursor: pointer;
+  }
+  .browser-breadcrumb span:hover { text-decoration: underline; }
+  .browser-list {
+    list-style: none;
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    background: #0d1117;
+  }
+  .browser-list::-webkit-scrollbar { width: 8px; }
+  .browser-list::-webkit-scrollbar-track { background: #0d1117; }
+  .browser-list::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+  .browser-item {
+    padding: 8px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #21262d;
+    transition: background 0.15s;
+  }
+  .browser-item:last-child { border-bottom: none; }
+  .browser-item:hover { background: #161b22; }
+  .browser-item-icon { color: #58a6ff; flex-shrink: 0; }
+  .browser-item-name { color: #e0e6f0; }
+  .browser-select-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+  }
+  .browser-current-path {
+    font-size: 12px;
+    color: #8b949e;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .empty-msg { color: #484f58; font-size: 13px; padding: 12px; }
+
+  /* ===== Stats ===== */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .stat-label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-value { font-size: 24px; color: #58a6ff; font-weight: 700; margin-top: 4px; }
+  .stat-sub { font-size: 11px; color: #8b949e; margin-top: 2px; }
+
+  /* ===== Buttons ===== */
+  .actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    background: #21262d;
+    color: #e0e6f0;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn:hover { background: #30363d; border-color: #8b949e; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: #238636; border-color: #2ea043; color: #fff; }
+  .btn-primary:hover { background: #2ea043; }
+  .btn-blue { background: #1f6feb; border-color: #388bfd; color: #fff; }
+  .btn-blue:hover { background: #388bfd; }
+  .btn-sm { padding: 4px 10px; font-size: 11px; }
+  .btn-danger { background: #da3633; border-color: #f85149; color: #fff; }
+  .btn-danger:hover { background: #f85149; }
+
+  /* ===== Panels ===== */
+  .output-panel {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .panel-header {
+    background: #161b22;
+    padding: 10px 16px;
+    border-bottom: 1px solid #30363d;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .panel-title { font-size: 13px; font-weight: 600; color: #f0f6fc; }
+  .panel-body {
+    padding: 16px;
+    max-height: 500px;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .panel-body::-webkit-scrollbar { width: 8px; }
+  .panel-body::-webkit-scrollbar-track { background: #0d1117; }
+  .panel-body::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+
+  .trace-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0;
+  }
+  .trace-table th {
+    text-align: left;
+    padding: 6px 12px;
+    background: #161b22;
+    color: #8b949e;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid #30363d;
+  }
+  .trace-table td {
+    padding: 6px 12px;
+    border-bottom: 1px solid #21262d;
+    font-size: 12px;
+  }
+  .trace-stage { color: #58a6ff; font-weight: 600; }
+  .trace-detail { color: #8b949e; }
+  .trace-time { color: #3fb950; font-weight: 600; text-align: right; }
+  .trace-fast { color: #3fb950; }
+  .trace-medium { color: #d29922; }
+  .trace-slow { color: #f85149; }
+
+  .response-content { color: #c9d1d9; }
+  .response-content h1, .response-content h2 { color: #58a6ff; margin: 16px 0 8px; }
+  .response-content h3 { color: #79c0ff; margin: 12px 0 6px; }
+  .response-content strong { color: #f0f6fc; }
+  .response-content code { background: #161b22; padding: 2px 6px; border-radius: 4px; color: #79c0ff; }
+
+  .module-input {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: #e0e6f0;
+    font-family: inherit;
+    font-size: 12px;
+    width: 220px;
+  }
+  .module-input:focus { outline: none; border-color: #58a6ff; }
+  .module-input::placeholder { color: #484f58; }
+
+  .query-area { width: 100%; margin-bottom: 20px; }
+  .query-textarea {
+    width: 100%;
+    min-height: 80px;
+    max-height: 300px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 10px 14px;
+    color: #e0e6f0;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.6;
+    resize: vertical;
+  }
+  .query-textarea:focus { outline: none; border-color: #58a6ff; }
+  .query-textarea::placeholder { color: #484f58; }
+  .query-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    font-size: 11px;
+    color: #8b949e;
+  }
+  .query-meta .over { color: #f85149; }
+
+  /* ===== Chat ===== */
+  .chat-container {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 160px);
+  }
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 0;
+  }
+  .chat-messages::-webkit-scrollbar { width: 8px; }
+  .chat-messages::-webkit-scrollbar-track { background: transparent; }
+  .chat-messages::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+  .chat-msg {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid #161b22;
+  }
+  .chat-msg:last-child { border-bottom: none; }
+  .chat-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .chat-avatar-user { background: #1f6feb; }
+  .chat-avatar-ai { background: #238636; }
+  .chat-body { flex: 1; min-width: 0; }
+  .chat-sender { font-size: 12px; font-weight: 600; color: #f0f6fc; margin-bottom: 4px; }
+  .chat-text { font-size: 13px; line-height: 1.6; color: #c9d1d9; white-space: pre-wrap; word-break: break-word; }
+  .chat-text code { background: #161b22; padding: 2px 6px; border-radius: 4px; color: #79c0ff; }
+  .chat-meta { font-size: 11px; color: #484f58; margin-top: 6px; display: flex; gap: 12px; align-items: center; }
+  .chat-rating { display: inline-flex; gap: 4px; }
+  .chat-rating-btn {
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .chat-rating-btn:hover { background: #30363d; border-color: #58a6ff; }
+  .chat-rating-btn.rated { background: #238636; border-color: #2ea043; color: #fff; }
+
+  .chat-input-area {
+    border-top: 1px solid #30363d;
+    padding: 12px 0;
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  .chat-input {
+    flex: 1;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: #e0e6f0;
+    font-family: inherit;
+    font-size: 13px;
+    min-height: 44px;
+    max-height: 120px;
+    resize: none;
+  }
+  .chat-input:focus { outline: none; border-color: #58a6ff; }
+  .chat-input::placeholder { color: #484f58; }
+
+  /* ===== Live Trace ===== */
+  .live-trace {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    margin: 8px 0;
+    overflow: hidden;
+    font-size: 12px;
+  }
+  .live-trace-header {
+    background: #161b22;
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+  }
+  .live-trace-header:hover { background: #1c2128; }
+  .live-trace-title {
+    color: #8b949e;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .live-trace-toggle {
+    color: #484f58;
+    font-size: 10px;
+    transition: transform 0.2s;
+  }
+  .live-trace.collapsed .live-trace-body { display: none; }
+  .live-trace.collapsed .live-trace-toggle { transform: rotate(-90deg); }
+  .live-trace-body {
+    padding: 8px 12px;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+  .live-trace-body::-webkit-scrollbar { width: 6px; }
+  .live-trace-body::-webkit-scrollbar-track { background: #0d1117; }
+  .live-trace-body::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+  .trace-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 4px 0;
+    border-bottom: 1px solid #161b22;
+  }
+  .trace-step:last-child { border-bottom: none; }
+  .trace-step-icon {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .trace-step-icon.pending { color: #484f58; }
+  .trace-step-icon.running { color: #d29922; }
+  .trace-step-icon.done { color: #3fb950; }
+  .trace-step-icon.error { color: #f85149; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .trace-spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid #484f58;
+    border-top-color: #d29922;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  .trace-step-content { flex: 1; min-width: 0; }
+  .trace-step-name { color: #c9d1d9; font-weight: 600; }
+  .trace-step-detail { color: #8b949e; margin-left: 4px; }
+  .trace-step-time {
+    color: #3fb950;
+    font-weight: 600;
+    flex-shrink: 0;
+    margin-left: 8px;
+  }
+  .trace-step-time.slow { color: #d29922; }
+  .trace-intent {
+    background: #161b22;
+    border-radius: 4px;
+    padding: 4px 8px;
+    margin: 4px 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #58a6ff;
+    font-weight: 600;
+  }
+  .trace-model {
+    background: #0d1f0d;
+    border-radius: 4px;
+    padding: 4px 8px;
+    margin: 4px 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #3fb950;
+    font-size: 11px;
+  }
+
+  /* ===== Evolution ===== */
+  .evo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  @media (max-width: 900px) { .evo-grid { grid-template-columns: 1fr; } }
+  .evo-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .evo-card-title { font-size: 14px; font-weight: 600; color: #f0f6fc; margin-bottom: 10px; }
+  .evo-stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #21262d; font-size: 13px; }
+  .evo-stat:last-child { border-bottom: none; }
+  .evo-stat-label { color: #8b949e; }
+  .evo-stat-value { color: #58a6ff; font-weight: 600; }
+  .evo-readiness {
+    display: inline-flex;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .readiness-NOT_READY { background: #1f0d0d; color: #f85149; border: 1px solid #da3633; }
+  .readiness-PROMPT_OPTIMIZATION { background: #1a1500; color: #d29922; border: 1px solid #9e6a03; }
+  .readiness-RAG_READY { background: #0d1f0d; color: #3fb950; border: 1px solid #238636; }
+  .readiness-LORA_POSSIBLE { background: #0d1a2e; color: #58a6ff; border: 1px solid #1f6feb; }
+  .readiness-LORA_RECOMMENDED { background: #1a0d2e; color: #bc8cff; border: 1px solid #8b5cf6; }
+  .evo-recommendation {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 12px;
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #8b949e;
+  }
+  .evo-milestone {
+    background: #161b22;
+    border-left: 3px solid #58a6ff;
+    padding: 8px 12px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #c9d1d9;
+  }
+
+  /* Training data table */
+  .td-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .td-table th {
+    text-align: left;
+    padding: 8px 10px;
+    background: #161b22;
+    color: #8b949e;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid #30363d;
+    position: sticky;
+    top: 0;
+  }
+  .td-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #21262d;
+    vertical-align: top;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .td-table tr:hover td { background: #161b22; }
+  .quality-bar {
+    display: inline-block;
+    width: 50px;
+    height: 6px;
+    background: #21262d;
+    border-radius: 3px;
+    overflow: hidden;
+    vertical-align: middle;
+    margin-right: 4px;
+  }
+  .quality-fill {
+    height: 100%;
+    border-radius: 3px;
+  }
+
+  /* ===== Settings ===== */
+  .settings-section {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .settings-section-title {
+    background: #0d1117;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #f0f6fc;
+    border-bottom: 1px solid #30363d;
+  }
+  .settings-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    border-bottom: 1px solid #21262d;
+    font-size: 13px;
+  }
+  .settings-row:last-child { border-bottom: none; }
+  .settings-key { color: #8b949e; width: 240px; flex-shrink: 0; }
+  .settings-val { color: #58a6ff; font-weight: 500; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">███████╗ ██████╗ ██████╗  ██████╗ ███████╗
+██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝
+█████╗  ██║   ██║██████╔╝██║  ███╗█████╗
+██╔══╝  ██║   ██║██╔══██╗██║   ██║██╔══╝
+██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗
+╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝</div>
+  <div class="header-info">
+    <h1>FORGE v2
+      <span id="statusBadge" class="status-badge status-ok"><span class="status-dot"></span>Ready</span>
+      <span id="ollamaBadge" class="status-badge status-ok" style="font-size:10px;"><span class="status-dot"></span>Ollama</span>
+    </h1>
+    <p>Local AI Code Intelligence &mdash; Desktop Edition</p>
+  </div>
+</div>
+
+<!-- Navigation -->
+<div class="nav-tabs">
+  <button class="nav-tab active" onclick="switchPage('dashboard', this)"><span class="nav-tab-icon">&#9776;</span> Dashboard</button>
+  <button class="nav-tab" onclick="switchPage('chat', this)"><span class="nav-tab-icon">&#128172;</span> Chat</button>
+  <button class="nav-tab" onclick="switchPage('evolution', this)"><span class="nav-tab-icon">&#129516;</span> Evolution</button>
+  <button class="nav-tab" onclick="switchPage('settings', this)"><span class="nav-tab-icon">&#9881;</span> Settings</button>
+</div>
+
+<!-- ==================== DASHBOARD PAGE ==================== -->
+<div class="tab-page active" id="page-dashboard">
+<div class="main">
+
+  <!-- Path Selector Bar -->
+  <div class="path-bar" id="pathBar">
+    <span class="path-icon">&#128193;</span>
+    <span class="path-label">Repo</span>
+    <span class="path-value" id="pathDisplay">Loading...</span>
+    <span class="path-db-status" id="pathDbStatus"></span>
+    <button class="path-change-btn" id="pathChangeBtn" onclick="togglePathPanel()">Change</button>
+  </div>
+
+  <!-- Path Selection Panel -->
+  <div class="path-panel" id="pathPanel">
+    <div class="path-panel-header">
+      <span class="path-panel-title">Select Repository</span>
+      <button class="path-panel-close" onclick="togglePathPanel()">&times;</button>
+    </div>
+    <div class="path-tabs">
+      <button class="path-tab active" onclick="switchPathTab('workspaces', this)">Known Workspaces</button>
+      <button class="path-tab" onclick="switchPathTab('custom', this)">Custom Path</button>
+      <button class="path-tab" onclick="switchPathTab('browse', this)">Browse</button>
+    </div>
+    <div class="path-tab-content active" id="tab-workspaces">
+      <ul class="workspace-list" id="workspaceList"><li class="empty-msg">Loading workspaces...</li></ul>
+    </div>
+    <div class="path-tab-content" id="tab-custom">
+      <div class="custom-path-row">
+        <input type="text" class="custom-path-input" id="customPathInput" placeholder="/path/to/your/repository">
+        <button class="btn btn-primary" onclick="applyCustomPath()">Apply</button>
+      </div>
+      <p style="font-size:12px;color:#8b949e;">Enter the full absolute path to any repository or folder.</p>
+    </div>
+    <div class="path-tab-content" id="tab-browse">
+      <div class="browser-breadcrumb" id="browserBreadcrumb"></div>
+      <ul class="browser-list" id="browserList"><li class="empty-msg">Loading...</li></ul>
+      <div class="browser-select-row">
+        <span class="browser-current-path" id="browserCurrentPath"></span>
+        <button class="btn btn-primary" onclick="selectBrowsedPath()">Select This Folder</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card"><div class="stat-label">Repository</div><div class="stat-value" id="statFiles">--</div><div class="stat-sub">loading...</div></div>
+    <div class="stat-card"><div class="stat-label">Modules</div><div class="stat-value" id="statModules">--</div><div class="stat-sub">loading...</div></div>
+    <div class="stat-card"><div class="stat-label">Chunks</div><div class="stat-value" id="statChunks">--</div><div class="stat-sub">loading...</div></div>
+    <div class="stat-card"><div class="stat-label">Embeddings</div><div class="stat-value" id="statEmbeddings">--</div><div class="stat-sub">loading...</div></div>
+    <div class="stat-card"><div class="stat-label">Ollama Models</div><div class="stat-value" id="statModels">--</div><div class="stat-sub">loading...</div></div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" id="btnAnalyze" onclick="runAnalyze()">&#9654; Analyze</button>
+    <button class="btn btn-blue" id="btnFocus" onclick="runFocus()">&#128269; Focus</button>
+    <input type="text" class="module-input" id="moduleInput" placeholder="Module: platform/lang-api" value="platform/lang-api">
+    <button class="btn" id="btnStatus" onclick="runStatus()">&#9881; Status</button>
+  </div>
+
+  <div class="query-area">
+    <textarea class="query-textarea" id="queryInput" rows="4" placeholder="Enter your question or prompt here..." oninput="updateWordCount()">What are the main abstractions?</textarea>
+    <div class="query-meta">
+      <span>Multi-line prompts up to 1000 words</span>
+      <span id="wordCount">5 / 1000 words</span>
+    </div>
+  </div>
+
+  <div class="output-panel" id="tracePanel">
+    <div class="panel-header">
+      <span class="panel-title">Execution Trace</span>
+      <span id="traceTime" style="color: #8b949e; font-size: 12px;"></span>
+    </div>
+    <div class="panel-body" id="traceBody">
+      <p style="color: #484f58;">Click a command to see the execution trace...</p>
+    </div>
+  </div>
+
+  <div class="output-panel">
+    <div class="panel-header">
+      <span class="panel-title" id="responseTitle">Response</span>
+    </div>
+    <div class="panel-body response-content" id="responseBody">
+      <p style="color: #484f58;">Output will appear here...</p>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ==================== CHAT PAGE ==================== -->
+<div class="tab-page" id="page-chat">
+<div class="main">
+  <div class="chat-container">
+    <div class="chat-messages" id="chatMessages">
+      <div style="text-align:center;color:#484f58;padding:40px;">
+        <div style="font-size:32px;margin-bottom:12px;">&#128172;</div>
+        <div style="font-size:14px;">Ask FORGE anything about your codebase</div>
+        <div style="font-size:12px;margin-top:4px;">Select a repository first, then start chatting</div>
+      </div>
+    </div>
+    <div class="chat-input-area">
+      <textarea class="chat-input" id="chatInput" placeholder="Ask about your code..." rows="1" onkeydown="chatKeyDown(event)" oninput="autoResizeChat()"></textarea>
+      <button class="btn btn-primary" id="chatSendBtn" onclick="sendChat()">Send</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ==================== EVOLUTION PAGE ==================== -->
+<div class="tab-page" id="page-evolution">
+<div class="main">
+
+  <h2 style="color:#f0f6fc;font-size:18px;margin-bottom:16px;">Model Evolution</h2>
+
+  <div class="evo-grid">
+    <!-- Status Card -->
+    <div class="evo-card">
+      <div class="evo-card-title">Evolution Status</div>
+      <div class="evo-stat">
+        <span class="evo-stat-label">Readiness</span>
+        <span id="evoReadiness" class="evo-readiness readiness-NOT_READY">NOT READY</span>
+      </div>
+      <div class="evo-stat">
+        <span class="evo-stat-label">Total Examples</span>
+        <span class="evo-stat-value" id="evoTotal">0</span>
+      </div>
+      <div class="evo-stat">
+        <span class="evo-stat-label">Validated Examples</span>
+        <span class="evo-stat-value" id="evoValidated">0</span>
+      </div>
+      <div class="evo-stat">
+        <span class="evo-stat-label">Avg Quality</span>
+        <span class="evo-stat-value" id="evoQuality">0.00</span>
+      </div>
+      <div class="evo-stat">
+        <span class="evo-stat-label">Active Model</span>
+        <span class="evo-stat-value" id="evoActiveModel">None</span>
+      </div>
+      <div class="evo-stat">
+        <span class="evo-stat-label">Registered Models</span>
+        <span class="evo-stat-value" id="evoRegistered">0</span>
+      </div>
+      <div class="evo-milestone" id="evoMilestone">Loading...</div>
+    </div>
+
+    <!-- Actions Card -->
+    <div class="evo-card">
+      <div class="evo-card-title">Recommendation</div>
+      <div class="evo-recommendation" id="evoRecommendation">Loading...</div>
+      <div style="margin-top:16px;">
+        <div class="evo-card-title">Dataset Export</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+          <input type="text" class="input-field" id="datasetVersion" placeholder="v1" value="v1" style="width:80px;padding:6px 10px;">
+          <input type="number" class="input-field" id="datasetMinQuality" placeholder="0.6" value="0.6" step="0.1" min="0" max="1" style="width:80px;padding:6px 10px;">
+          <button class="btn btn-primary btn-sm" onclick="buildDataset()">Export Dataset</button>
+        </div>
+        <div id="datasetResult" style="font-size:12px;color:#8b949e;margin-top:8px;"></div>
+      </div>
+      <div style="margin-top:16px;">
+        <div class="evo-card-title">Model Registry</div>
+        <div id="modelRegistryList" style="margin-top:8px;font-size:12px;color:#484f58;">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Training Data Browser -->
+  <div class="output-panel">
+    <div class="panel-header">
+      <span class="panel-title">Training Data</span>
+      <span style="color:#8b949e;font-size:12px;" id="tdPageInfo">Page 0</span>
+    </div>
+    <div class="panel-body" style="padding:0;max-height:400px;">
+      <table class="td-table" id="tdTable">
+        <thead>
+          <tr>
+            <th style="width:40px">ID</th>
+            <th>Input</th>
+            <th>Output</th>
+            <th style="width:70px">Type</th>
+            <th style="width:80px">Quality</th>
+            <th style="width:60px">Rating</th>
+            <th style="width:80px">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tdTableBody">
+          <tr><td colspan="7" class="empty-msg">No training data yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="padding:8px 16px;display:flex;gap:8px;justify-content:center;border-top:1px solid #30363d;">
+      <button class="btn btn-sm" onclick="loadTrainingData(Math.max(0, currentTdPage-1))">Prev</button>
+      <button class="btn btn-sm" onclick="loadTrainingData(currentTdPage+1)">Next</button>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ==================== SETTINGS PAGE ==================== -->
+<div class="tab-page" id="page-settings">
+<div class="main">
+
+  <h2 style="color:#f0f6fc;font-size:18px;margin-bottom:16px;">Configuration</h2>
+  <div id="settingsContent">
+    <p style="color:#484f58;">Loading configuration...</p>
+  </div>
+
+</div>
+</div>
+
+<script>
+// ===== Global state =====
+let currentBrowsePath = '';
+let chatHistory = [];
+let currentTdPage = 0;
+
+// ===== Navigation =====
+function switchPage(pageId, btn) {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-page').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('page-' + pageId).classList.add('active');
+  // Load data for specific pages
+  if (pageId === 'evolution') loadEvolutionData();
+  if (pageId === 'settings') loadSettings();
+}
+
+// ===== Utility =====
+async function fetchJSON(url, opts) {
+  const res = await fetch(url, opts);
+  return res.json();
+}
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+// ===== Path Management =====
+async function loadCurrentPath() {
+  try {
+    const data = await fetchJSON('/api/current-path');
+    document.getElementById('pathDisplay').textContent = data.repoPath || '(none)';
+    const dbBadge = document.getElementById('pathDbStatus');
+    if (data.hasDb) {
+      dbBadge.className = 'path-db-status path-db-ok';
+      dbBadge.textContent = 'DB Ready';
+    } else {
+      dbBadge.className = 'path-db-status path-db-missing';
+      dbBadge.textContent = 'No DB';
+    }
+  } catch (e) {
+    document.getElementById('pathDisplay').textContent = 'Error loading';
+  }
+}
+
+function togglePathPanel() {
+  const panel = document.getElementById('pathPanel');
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) { panel.classList.remove('open'); }
+  else { panel.classList.add('open'); loadWorkspaces(); }
+}
+
+function switchPathTab(tabId, btn) {
+  document.querySelectorAll('.path-tabs .path-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.path-tab-content').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + tabId).classList.add('active');
+  if (tabId === 'browse') loadBrowse();
+  if (tabId === 'workspaces') loadWorkspaces();
+}
+
+async function loadWorkspaces() {
+  const list = document.getElementById('workspaceList');
+  list.innerHTML = '<li class="empty-msg">Loading...</li>';
+  try {
+    const workspaces = await fetchJSON('/api/workspaces');
+    if (workspaces.length === 0) {
+      list.innerHTML = '<li class="empty-msg">No workspaces found. Run analyze first.</li>';
+      return;
+    }
+    list.innerHTML = '';
+    for (const ws of workspaces) {
+      const li = document.createElement('li');
+      li.className = 'workspace-item' + (ws.isCurrent ? ' current' : '');
+      const date = ws.createdAt ? new Date(ws.createdAt).toLocaleDateString() : '?';
+      li.innerHTML = `
+        <span class="workspace-icon">${ws.isCurrent ? '&#9989;' : '&#128193;'}</span>
+        <div class="workspace-info">
+          <div class="workspace-path">${escHtml(ws.repoPath)}</div>
+          <div class="workspace-meta">Created: ${date} &bull; ${ws.hasDb ? 'DB ready' : 'No DB'}</div>
+        </div>
+        ${ws.isCurrent ? '<span class="workspace-badge path-db-ok">Current</span>' : ''}
+      `;
+      li.onclick = () => setPath(ws.repoPath);
+      list.appendChild(li);
+    }
+  } catch (e) {
+    list.innerHTML = '<li class="empty-msg">Error loading workspaces</li>';
+  }
+}
+
+async function setPath(newPath) {
+  try {
+    const data = await fetchJSON('/api/set-path', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: newPath })
+    });
+    if (data.error) { alert('Error: ' + data.error); return; }
+    document.getElementById('pathPanel').classList.remove('open');
+    loadCurrentPath();
+    loadStats();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+function applyCustomPath() {
+  const val = document.getElementById('customPathInput').value.trim();
+  if (!val) { alert('Please enter a path'); return; }
+  setPath(val);
+}
+
+async function loadBrowse(dir) {
+  const list = document.getElementById('browserList');
+  list.innerHTML = '<li class="empty-msg">Loading...</li>';
+  try {
+    const qdir = dir ? '?dir=' + encodeURIComponent(dir) : '';
+    const data = await fetchJSON('/api/browse' + qdir);
+    currentBrowsePath = data.current;
+    document.getElementById('browserCurrentPath').textContent = data.current;
+    const parts = data.current.split('/').filter(Boolean);
+    const bc = document.getElementById('browserBreadcrumb');
+    bc.innerHTML = '';
+    let accumulated = '';
+    const rootSpan = document.createElement('span');
+    rootSpan.textContent = '/';
+    rootSpan.onclick = () => loadBrowse('/');
+    bc.appendChild(rootSpan);
+    for (let i = 0; i < parts.length; i++) {
+      accumulated += '/' + parts[i];
+      bc.appendChild(document.createTextNode(' / '));
+      const s = document.createElement('span');
+      s.textContent = parts[i];
+      const target = accumulated;
+      s.onclick = () => loadBrowse(target);
+      bc.appendChild(s);
+    }
+    list.innerHTML = '';
+    if (data.current !== data.parent) {
+      const upLi = document.createElement('li');
+      upLi.className = 'browser-item';
+      upLi.innerHTML = '<span class="browser-item-icon">&#11014;</span><span class="browser-item-name">..</span>';
+      upLi.onclick = () => loadBrowse(data.parent);
+      list.appendChild(upLi);
+    }
+    if (data.dirs && data.dirs.length > 0) {
+      for (const d of data.dirs) {
+        const li = document.createElement('li');
+        li.className = 'browser-item';
+        li.innerHTML = `<span class="browser-item-icon">&#128193;</span><span class="browser-item-name">${escHtml(d.name)}</span>`;
+        li.onclick = () => loadBrowse(d.path);
+        list.appendChild(li);
+      }
+    } else {
+      list.innerHTML = '<li class="empty-msg">No subdirectories</li>';
+    }
+    if (data.isGitRepo) {
+      document.getElementById('browserCurrentPath').innerHTML =
+        escHtml(data.current) + ' <span style="color:#3fb950;font-size:10px;background:#0d1f0d;padding:1px 6px;border-radius:8px;border:1px solid #238636;">git repo</span>';
+    }
+  } catch (e) {
+    list.innerHTML = '<li class="empty-msg">Error: ' + escHtml(e.message) + '</li>';
+  }
+}
+
+function selectBrowsedPath() {
+  if (currentBrowsePath) setPath(currentBrowsePath);
+}
+
+// ===== Stats & Commands =====
+async function loadStats() {
+  try {
+    const data = await fetchJSON('/api/stats');
+    document.getElementById('statFiles').textContent = data.files?.toLocaleString() || '--';
+    document.getElementById('statFiles').parentElement.querySelector('.stat-sub').textContent = 'source files';
+    document.getElementById('statModules').textContent = data.modules?.toLocaleString() || '--';
+    document.getElementById('statModules').parentElement.querySelector('.stat-sub').textContent = data.moduleTypes || 'modules';
+    document.getElementById('statChunks').textContent = data.chunks?.toLocaleString() || '--';
+    document.getElementById('statChunks').parentElement.querySelector('.stat-sub').textContent = 'code chunks';
+    document.getElementById('statEmbeddings').textContent = data.embeddings?.toLocaleString() || '--';
+    document.getElementById('statEmbeddings').parentElement.querySelector('.stat-sub').textContent = `${data.embeddingPct || 0}% embedded`;
+    document.getElementById('statModels').textContent = data.ollamaModels || '--';
+    document.getElementById('statModels').parentElement.querySelector('.stat-sub').textContent = 'available';
+  } catch(e) { console.error('Stats:', e); }
+}
+
+function setRunning(label) {
+  const badge = document.getElementById('statusBadge');
+  badge.className = 'status-badge status-running';
+  badge.innerHTML = '<span class="status-dot"></span>' + escHtml(label);
+  document.querySelectorAll('.btn').forEach(b => b.disabled = true);
+}
+
+function setReady() {
+  const badge = document.getElementById('statusBadge');
+  badge.className = 'status-badge status-ok';
+  badge.innerHTML = '<span class="status-dot"></span>Ready';
+  document.querySelectorAll('.btn').forEach(b => b.disabled = false);
+}
+
+function renderTrace(trace) {
+  if (!trace || trace.length === 0) return '<p style="color:#484f58;">No trace data</p>';
+  let html = '<table class="trace-table"><thead><tr><th>Stage</th><th>Detail</th><th style="text-align:right">Duration</th></tr></thead><tbody>';
+  let total = 0;
+  for (const t of trace) {
+    const ms = t.durationMs || 0;
+    total += ms;
+    const cls = ms < 1000 ? 'trace-fast' : ms < 30000 ? 'trace-medium' : 'trace-slow';
+    const timeStr = ms < 1000 ? ms + 'ms' : (ms / 1000).toFixed(1) + 's';
+    html += `<tr><td class="trace-stage">${escHtml(t.stage)}</td><td class="trace-detail">${escHtml(t.detail || '')}</td><td class="trace-time ${cls}">${timeStr}</td></tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('traceTime').textContent = 'Total: ' + (total / 1000).toFixed(1) + 's';
+  return html;
+}
+
+function renderMarkdown(text) {
+  if (!text) return '';
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+    .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+    .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`(.*?)`/g, '<code>$1</code>')
+    .replace(/^- (.*$)/gm, '&bull; $1')
+    .replace(/\n/g, '<br>');
+}
+
+async function runAnalyze() {
+  setRunning('Analyzing...');
+  document.getElementById('traceBody').innerHTML = '<p style="color:#d29922;">&#9203; Running forge analyze... (this may take several minutes)</p>';
+  document.getElementById('responseBody').innerHTML = '<p style="color:#d29922;">&#9203; Waiting for LLM response...</p>';
+  document.getElementById('responseTitle').textContent = 'Response - Repository Analysis';
+  try {
+    const data = await fetchJSON('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    document.getElementById('traceBody').innerHTML = renderTrace(data.trace);
+    const model = data.model || 'LLM';
+    const hdr = `<div style="background:#0d1f0d;border:1px solid #238636;border-radius:6px;padding:10px 14px;margin-bottom:12px;color:#3fb950;font-weight:600;">&#9989; Response (${escHtml(model)}) - ${(data.response?.length || 0)} chars</div>`;
+    document.getElementById('responseBody').innerHTML = hdr + renderMarkdown(data.response);
+  } catch(e) {
+    document.getElementById('responseBody').innerHTML = '<p style="color:#f85149;">Error: ' + escHtml(e.message) + '</p>';
+  }
+  setReady();
+  loadStats();
+}
+
+async function runFocus() {
+  const module = document.getElementById('moduleInput').value || 'platform/lang-api';
+  const query = document.getElementById('queryInput').value || 'What are the main abstractions?';
+  setRunning('Focusing...');
+  document.getElementById('traceBody').innerHTML = `<p style="color:#d29922;">&#9203; Focusing on ${escHtml(module)}...</p>`;
+  document.getElementById('responseBody').innerHTML = '<p style="color:#d29922;">&#9203; Waiting for LLM response...</p>';
+  document.getElementById('responseTitle').textContent = 'Response - Focus: ' + module;
+  try {
+    const data = await fetchJSON('/api/focus', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ module, query })
+    });
+    document.getElementById('traceBody').innerHTML = renderTrace(data.trace);
+    const model = data.model || 'LLM';
+    const hdr = `<div style="background:#0d1f0d;border:1px solid #238636;border-radius:6px;padding:10px 14px;margin-bottom:12px;color:#3fb950;font-weight:600;">&#9989; Response (${escHtml(model)}) - ${(data.response?.length || 0)} chars</div>`;
+    document.getElementById('responseBody').innerHTML = hdr + renderMarkdown(data.response);
+  } catch(e) {
+    document.getElementById('responseBody').innerHTML = '<p style="color:#f85149;">Error: ' + escHtml(e.message) + '</p>';
+  }
+  setReady();
+  loadStats();
+}
+
+async function runStatus() {
+  setRunning('Checking...');
+  try {
+    const data = await fetchJSON('/api/status');
+    document.getElementById('traceBody').innerHTML = '<p style="color:#3fb950;">Status check complete</p>';
+    document.getElementById('responseBody').innerHTML = '<pre>' + escHtml(data.output || 'OK') + '</pre>';
+    document.getElementById('responseTitle').textContent = 'Response - Status';
+  } catch(e) {
+    document.getElementById('responseBody').innerHTML = '<p style="color:#f85149;">Error: ' + escHtml(e.message) + '</p>';
+  }
+  setReady();
+  loadStats();
+}
+
+function updateWordCount() {
+  const text = document.getElementById('queryInput').value.trim();
+  const words = text ? text.split(/\s+/).length : 0;
+  const el = document.getElementById('wordCount');
+  el.textContent = words + ' / 1000 words';
+  el.className = words > 1000 ? 'over' : '';
+}
+
+// ===== Chat =====
+function chatKeyDown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendChat();
+  }
+}
+
+function autoResizeChat() {
+  const el = document.getElementById('chatInput');
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function addChatMessage(role, text, meta) {
+  const container = document.getElementById('chatMessages');
+  // Remove empty state
+  if (chatHistory.length === 0) container.innerHTML = '';
+
+  const msg = document.createElement('div');
+  msg.className = 'chat-msg';
+  const isUser = role === 'user';
+  const avatarClass = isUser ? 'chat-avatar-user' : 'chat-avatar-ai';
+  const avatarIcon = isUser ? '&#128100;' : '&#9889;';
+  const sender = isUser ? 'You' : 'FORGE';
+
+  let metaHtml = '';
+  if (meta) {
+    metaHtml = `<div class="chat-meta">`;
+    if (meta.model) metaHtml += `<span>${escHtml(meta.model)}</span>`;
+    if (meta.taskType) metaHtml += `<span>${escHtml(meta.taskType)}</span>`;
+    if (meta.duration) metaHtml += `<span>${meta.duration}</span>`;
+    if (meta.trainingDataId) {
+      metaHtml += `<span class="chat-rating">
+        <button class="chat-rating-btn" onclick="rateTrainingData(${meta.trainingDataId}, 3, this)" title="Good">&#128077;</button>
+        <button class="chat-rating-btn" onclick="rateTrainingData(${meta.trainingDataId}, 2, this)" title="OK">&#128528;</button>
+        <button class="chat-rating-btn" onclick="rateTrainingData(${meta.trainingDataId}, 1, this)" title="Bad">&#128078;</button>
+      </span>`;
+    }
+    metaHtml += `</div>`;
+  }
+
+  msg.innerHTML = `
+    <div class="chat-avatar ${avatarClass}">${avatarIcon}</div>
+    <div class="chat-body">
+      <div class="chat-sender">${sender}</div>
+      <div class="chat-text">${isUser ? escHtml(text) : renderMarkdown(text)}</div>
+      ${metaHtml}
+    </div>
+  `;
+  container.appendChild(msg);
+  container.scrollTop = container.scrollHeight;
+  chatHistory.push({ role, text });
+}
+
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const query = input.value.trim();
+  if (!query) return;
+
+  input.value = '';
+  autoResizeChat();
+  addChatMessage('user', query);
+
+  // Create AI message with live trace panel
+  const container = document.getElementById('chatMessages');
+  const msg = document.createElement('div');
+  msg.className = 'chat-msg';
+  msg.innerHTML = `
+    <div class="chat-avatar chat-avatar-ai">&#9889;</div>
+    <div class="chat-body">
+      <div class="chat-sender">FORGE</div>
+      <div class="live-trace" id="liveTrace">
+        <div class="live-trace-header" onclick="toggleTrace()">
+          <span class="live-trace-title">&#9881; Execution Trace</span>
+          <span class="live-trace-toggle" id="traceToggle">&#9660;</span>
+        </div>
+        <div class="live-trace-body" id="traceBody"></div>
+      </div>
+      <div class="chat-text" id="streamingResponse" style="margin-top:8px;"></div>
+      <div class="chat-meta" id="streamingMeta" style="display:none;"></div>
+    </div>
+  `;
+  container.appendChild(msg);
+  container.scrollTop = container.scrollHeight;
+
+  document.getElementById('chatSendBtn').disabled = true;
+
+  const traceBody = document.getElementById('traceBody');
+  const responseEl = document.getElementById('streamingResponse');
+  const metaEl = document.getElementById('streamingMeta');
+  let responseText = '';
+  let traceSteps = {};
+  let finalMeta = {};
+  const startTime = Date.now();
+
+  try {
+    const resp = await fetch('/api/ask/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query })
+    });
+
+    if (!resp.ok) {
+      throw new Error('Server error: ' + resp.status);
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const jsonStr = line.substring(6).trim();
+        if (!jsonStr) continue;
+
+        let event;
+        try { event = JSON.parse(jsonStr); } catch(e) { continue; }
+
+        handleTraceEvent(event, traceBody, responseEl, traceSteps, finalMeta);
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+
+    // Process remaining buffer
+    if (buffer.trim()) {
+      const remaining = buffer.trim();
+      if (remaining.startsWith('data: ')) {
+        try {
+          const event = JSON.parse(remaining.substring(6).trim());
+          handleTraceEvent(event, traceBody, responseEl, traceSteps, finalMeta);
+        } catch(e) {}
+      }
+    }
+
+    // Show meta info
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1) + 's';
+    let metaHtml = '';
+    if (finalMeta.model) metaHtml += `<span>${escHtml(finalMeta.model)}</span>`;
+    if (finalMeta.taskType) metaHtml += `<span>${escHtml(finalMeta.taskType)}</span>`;
+    metaHtml += `<span>${duration}</span>`;
+    if (metaHtml) {
+      metaEl.innerHTML = metaHtml;
+      metaEl.style.display = '';
+    }
+
+    // Record in chat history
+    chatHistory.push({ role: 'ai', text: responseEl.textContent });
+
+    // Remove live IDs so next message can reuse them
+    document.getElementById('liveTrace')?.removeAttribute('id');
+    document.getElementById('traceBody')?.removeAttribute('id');
+    document.getElementById('streamingResponse')?.removeAttribute('id');
+    document.getElementById('streamingMeta')?.removeAttribute('id');
+    document.getElementById('traceToggle')?.removeAttribute('id');
+
+  } catch(e) {
+    responseEl.innerHTML = `<span style="color:#f85149;">Error: ${escHtml(e.message)}</span>`;
+    chatHistory.push({ role: 'ai', text: 'Error: ' + e.message });
+  }
+
+  document.getElementById('chatSendBtn').disabled = false;
+}
+
+function handleTraceEvent(event, traceBody, responseEl, traceSteps, finalMeta) {
+  switch (event.type) {
+    case 'stage_started': {
+      const stepId = 'trace-step-' + (event.stageName || '').replace(/\s+/g, '-');
+      const step = document.createElement('div');
+      step.className = 'trace-step';
+      step.id = stepId;
+      step.innerHTML = `
+        <div class="trace-step-icon running">
+          <div class="trace-spinner"></div>
+        </div>
+        <div class="trace-step-content">
+          <span class="trace-step-name">${escHtml(event.stageName || '')}</span>
+          <span class="trace-step-detail">${escHtml(event.description || '')}</span>
+          ${event.stageIndex != null ? `<span class="trace-step-detail" style="color:#484f58;"> [${event.stageIndex + 1}/${event.totalStages}]</span>` : ''}
+        </div>
+      `;
+      traceBody.appendChild(step);
+      traceSteps[event.stageName] = step;
+      break;
+    }
+
+    case 'stage_completed': {
+      const step = traceSteps[event.stageName];
+      if (step) {
+        const icon = step.querySelector('.trace-step-icon');
+        icon.className = 'trace-step-icon done';
+        icon.innerHTML = '&#10003;';
+        // Add duration
+        const dur = event.durationMs;
+        const durStr = dur >= 1000 ? (dur / 1000).toFixed(1) + 's' : dur + 'ms';
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'trace-step-time' + (dur > 3000 ? ' slow' : '');
+        timeSpan.textContent = durStr;
+        step.appendChild(timeSpan);
+        // Add detail if provided
+        if (event.detail) {
+          const detailEl = step.querySelector('.trace-step-detail');
+          if (detailEl) detailEl.textContent = event.detail;
+        }
+      }
+      break;
+    }
+
+    case 'intent_resolved': {
+      finalMeta.taskType = event.taskType;
+      const step = document.createElement('div');
+      step.className = 'trace-step';
+      step.innerHTML = `
+        <div class="trace-step-icon done" style="color:#58a6ff;">&#128269;</div>
+        <div class="trace-step-content">
+          <span class="trace-step-name">Intent</span>
+          <span class="trace-step-detail">${escHtml(event.taskType || '')} (${((event.confidence || 0) * 100).toFixed(0)}% confidence)</span>
+        </div>
+      `;
+      traceBody.appendChild(step);
+      break;
+    }
+
+    case 'model_selected': {
+      finalMeta.model = event.modelName;
+      const step = document.createElement('div');
+      step.className = 'trace-step';
+      step.innerHTML = `
+        <div class="trace-step-icon done" style="color:#bc8cff;">&#129302;</div>
+        <div class="trace-step-content">
+          <span class="trace-step-name">Model</span>
+          <span class="trace-step-detail">${escHtml(event.modelName || '')}</span>
+        </div>
+      `;
+      traceBody.appendChild(step);
+      break;
+    }
+
+    case 'analysis_progress': {
+      let progressEl = document.getElementById('deepProgress');
+      if (!progressEl) {
+        progressEl = document.createElement('div');
+        progressEl.id = 'deepProgress';
+        progressEl.className = 'trace-step';
+        progressEl.style.cssText = 'flex-direction:column;gap:6px;';
+        traceBody.appendChild(progressEl);
+      }
+      const pct = Math.round((event.stageIndex / event.totalStages) * 100);
+      progressEl.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;width:100%;">
+          <div class="trace-step-icon running"><div class="trace-spinner"></div></div>
+          <div class="trace-step-content" style="flex:1;">
+            <span class="trace-step-name">Deep Analysis</span>
+            <span class="trace-step-detail">${escHtml(event.stageName || '')} (${event.stageIndex}/${event.totalStages})</span>
+          </div>
+          <span style="color:#58a6ff;font-size:12px;font-weight:600;">${pct}%</span>
+        </div>
+        <div style="width:100%;height:6px;background:#21262d;border-radius:3px;margin-top:2px;">
+          <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,#1f6feb,#58a6ff);border-radius:3px;transition:width 0.4s ease;"></div>
+        </div>
+      `;
+      if (pct >= 100) {
+        const icon = progressEl.querySelector('.trace-step-icon');
+        if (icon) { icon.className = 'trace-step-icon done'; icon.innerHTML = '&#10003;'; }
+      }
+      break;
+    }
+
+    case 'llm_token': {
+      responseEl.innerHTML = renderMarkdown(responseEl._rawText = (responseEl._rawText || '') + (event.token || ''));
+      break;
+    }
+
+    case 'error': {
+      const step = traceSteps[event.stageName];
+      if (step) {
+        const icon = step.querySelector('.trace-step-icon');
+        icon.className = 'trace-step-icon error';
+        icon.innerHTML = '&#10007;';
+      }
+      const errStep = document.createElement('div');
+      errStep.className = 'trace-step';
+      errStep.innerHTML = `
+        <div class="trace-step-icon error">&#10007;</div>
+        <div class="trace-step-content">
+          <span class="trace-step-name" style="color:#f85149;">${escHtml(event.stageName || 'Error')}</span>
+          <span class="trace-step-detail" style="color:#f85149;">${escHtml(event.errorMessage || '')}</span>
+        </div>
+      `;
+      traceBody.appendChild(errStep);
+      break;
+    }
+
+    case 'done': {
+      finalMeta.model = event.model || finalMeta.model;
+      finalMeta.taskType = event.taskType || finalMeta.taskType;
+      // Set final response if we didn't get streaming tokens
+      if (!responseEl._rawText && event.response) {
+        responseEl.innerHTML = renderMarkdown(event.response);
+      }
+      // Add completion entry to trace
+      const durStr = event.totalDurationMs ? ((event.totalDurationMs / 1000).toFixed(1) + 's') : '';
+      const doneStep = document.createElement('div');
+      doneStep.className = 'trace-step';
+      doneStep.innerHTML = `
+        <div class="trace-step-icon done">&#9989;</div>
+        <div class="trace-step-content">
+          <span class="trace-step-name">Complete</span>
+          ${durStr ? `<span class="trace-step-detail">${durStr} total</span>` : ''}
+        </div>
+      `;
+      traceBody.appendChild(doneStep);
+      break;
+    }
+  }
+}
+
+function toggleTrace() {
+  const trace = document.getElementById('liveTrace');
+  if (trace) trace.classList.toggle('collapsed');
+}
+
+async function rateTrainingData(id, rating, btn) {
+  try {
+    await fetchJSON('/api/evolution/rate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId: String(id), rating })
+    });
+    // Highlight the clicked button
+    const parent = btn.parentElement;
+    parent.querySelectorAll('.chat-rating-btn').forEach(b => b.classList.remove('rated'));
+    btn.classList.add('rated');
+  } catch(e) { console.error('Rating failed:', e); }
+}
+
+// ===== Evolution =====
+async function loadEvolutionData() {
+  try {
+    const status = await fetchJSON('/api/evolution/status');
+    document.getElementById('evoTotal').textContent = status.totalExamples;
+    document.getElementById('evoValidated').textContent = status.validatedExamples;
+    document.getElementById('evoQuality').textContent = (status.averageQuality || 0).toFixed(2);
+    document.getElementById('evoActiveModel').textContent = status.activeModel || 'None';
+    document.getElementById('evoRegistered').textContent = status.registeredModels;
+
+    const readiness = status.readiness || 'NOT_READY';
+    const rEl = document.getElementById('evoReadiness');
+    rEl.textContent = readiness.replace(/_/g, ' ');
+    rEl.className = 'evo-readiness readiness-' + readiness;
+
+    document.getElementById('evoMilestone').textContent = status.nextMilestone || '';
+    document.getElementById('evoRecommendation').textContent = status.recommendation || '';
+  } catch(e) {
+    document.getElementById('evoRecommendation').textContent = 'Error loading evolution status: ' + e.message;
+  }
+
+  loadTrainingData(0);
+  loadModelRegistry();
+}
+
+let currentTdPageSize = 20;
+
+async function loadTrainingData(page) {
+  currentTdPage = page;
+  try {
+    const data = await fetchJSON(`/api/evolution/training-data?page=${page}&pageSize=${currentTdPageSize}`);
+    const tbody = document.getElementById('tdTableBody');
+    document.getElementById('tdPageInfo').textContent = `Page ${page + 1} / ${Math.ceil((data.total || 1) / currentTdPageSize)} (${data.total} total)`;
+
+    if (!data.data || data.data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">No training data collected yet. Use FORGE to generate Q/A pairs.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = '';
+    for (const row of data.data) {
+      const tr = document.createElement('tr');
+      const qColor = row.quality >= 0.8 ? '#3fb950' : row.quality >= 0.6 ? '#d29922' : '#f85149';
+      const qPct = Math.round(row.quality * 100);
+      const ratingText = row.userRating === 3 ? '&#128077;' : row.userRating === 2 ? '&#128528;' : row.userRating === 1 ? '&#128078;' : '--';
+
+      tr.innerHTML = `
+        <td style="color:#484f58;">${row.id}</td>
+        <td title="${escHtml(row.input)}">${escHtml(row.input)}</td>
+        <td title="${escHtml(row.output)}">${escHtml(row.output)}</td>
+        <td style="color:#8b949e;">${escHtml(row.taskType || '')}</td>
+        <td><span class="quality-bar"><span class="quality-fill" style="width:${qPct}%;background:${qColor}"></span></span>${qPct}%</td>
+        <td style="text-align:center;">${ratingText}</td>
+        <td>
+          <button class="btn btn-sm" onclick="rateTrainingData(${row.id}, 3, this)" title="Good">&#128077;</button>
+          <button class="btn btn-sm" onclick="rateTrainingData(${row.id}, 1, this)" title="Bad">&#128078;</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+  } catch(e) {
+    document.getElementById('tdTableBody').innerHTML = '<tr><td colspan="7" class="empty-msg">Error: ' + escHtml(e.message) + '</td></tr>';
+  }
+}
+
+async function loadModelRegistry() {
+  try {
+    const models = await fetchJSON('/api/evolution/models');
+    const container = document.getElementById('modelRegistryList');
+    if (!models || models.length === 0) {
+      container.innerHTML = '<div style="color:#484f58;">No models registered yet</div>';
+      return;
+    }
+    let html = '';
+    for (const m of models) {
+      const statusColor = m.status === 'active' ? '#3fb950' : m.status === 'retired' ? '#8b949e' : '#d29922';
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #21262d;">
+        <div>
+          <span style="color:#f0f6fc;font-weight:600;">${escHtml(m.name)}</span>
+          <span style="color:#8b949e;margin-left:8px;">${escHtml(m.baseModel)} / ${escHtml(m.version)}</span>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span style="color:${statusColor};font-size:11px;font-weight:600;">${escHtml(m.status)}</span>
+          ${m.status !== 'active' ? `<button class="btn btn-sm btn-primary" onclick="activateModel('${escHtml(m.name)}')">Activate</button>` : ''}
+        </div>
+      </div>`;
+    }
+    container.innerHTML = html;
+  } catch(e) {
+    document.getElementById('modelRegistryList').innerHTML = '<div style="color:#f85149;">Error: ' + escHtml(e.message) + '</div>';
+  }
+}
+
+async function buildDataset() {
+  const version = document.getElementById('datasetVersion').value || 'v1';
+  const minQuality = parseFloat(document.getElementById('datasetMinQuality').value) || 0.6;
+  const resultEl = document.getElementById('datasetResult');
+  resultEl.innerHTML = '<span style="color:#d29922;">Exporting...</span>';
+  try {
+    const data = await fetchJSON('/api/evolution/build-dataset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version, minQuality })
+    });
+    if (data.success) {
+      resultEl.innerHTML = `<span style="color:#3fb950;">&#9989; ${escHtml(data.message)}</span>`;
+    } else {
+      resultEl.innerHTML = `<span style="color:#d29922;">${escHtml(data.message)}</span>`;
+    }
+  } catch(e) {
+    resultEl.innerHTML = `<span style="color:#f85149;">Error: ${escHtml(e.message)}</span>`;
+  }
+}
+
+async function activateModel(name) {
+  if (!confirm(`Activate model "${name}"? This will run a sanity check.`)) return;
+  try {
+    const data = await fetchJSON('/api/evolution/activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modelName: name })
+    });
+    alert(data.message || data.error);
+    loadEvolutionData();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+// ===== Settings =====
+async function loadSettings() {
+  try {
+    const cfg = await fetchJSON('/api/config');
+    const container = document.getElementById('settingsContent');
+    const sections = {
+      'Ollama': [
+        ['Host', cfg.ollama_host],
+        ['Timeout (seconds)', cfg.ollama_timeout]
+      ],
+      'Models': [
+        ['Classify', cfg.model_classify],
+        ['Reason', cfg.model_reason],
+        ['Code', cfg.model_code],
+        ['Embed', cfg.model_embed],
+        ['Summarize', cfg.model_summarize],
+        ['Vision', cfg.model_vision]
+      ],
+      'Workspace': [
+        ['Base Dir', cfg.workspace_base_dir],
+        ['Chunk Max Lines', cfg.chunk_max_lines]
+      ],
+      'Retrieval': [
+        ['Max Context Chunks', cfg.max_context_chunks],
+        ['Similarity Threshold', cfg.similarity_threshold]
+      ],
+      'Decomposition': [
+        ['Enabled', cfg.decomposition_enabled ? 'Yes' : 'No'],
+        ['Max Partitions', cfg.max_partitions]
+      ],
+      'Evolution': [
+        ['Enabled', cfg.evolution_enabled ? 'Yes' : 'No'],
+        ['Collect Training Data', cfg.evolution_collect_data ? 'Yes' : 'No'],
+        ['Quality Threshold', cfg.evolution_quality_threshold],
+        ['Product Model', cfg.evolution_product_model || '(none)']
+      ],
+      'IntelliJ': [
+        ['Enabled', cfg.intellij_enabled ? 'Yes' : 'No']
+      ]
+    };
+
+    let html = '';
+    for (const [sectionName, rows] of Object.entries(sections)) {
+      html += `<div class="settings-section"><div class="settings-section-title">${escHtml(sectionName)}</div>`;
+      for (const [key, val] of rows) {
+        html += `<div class="settings-row"><span class="settings-key">${escHtml(key)}</span><span class="settings-val">${escHtml(String(val))}</span></div>`;
+      }
+      html += '</div>';
+    }
+    container.innerHTML = html;
+  } catch(e) {
+    document.getElementById('settingsContent').innerHTML = '<p style="color:#f85149;">Error loading config: ' + escHtml(e.message) + '</p>';
+  }
+}
+
+// ===== Ollama Status Check =====
+async function checkOllamaStatus() {
+  const badge = document.getElementById('ollamaBadge');
+  try {
+    const data = await fetchJSON('/api/status');
+    if (data.ollamaAvailable) {
+      badge.className = 'status-badge status-ok';
+      badge.style.fontSize = '10px';
+      badge.innerHTML = '<span class="status-dot"></span>Ollama';
+    } else {
+      badge.className = 'status-badge status-err';
+      badge.style.fontSize = '10px';
+      badge.innerHTML = '<span class="status-dot"></span>Ollama';
+    }
+  } catch(e) {
+    badge.className = 'status-badge status-err';
+    badge.style.fontSize = '10px';
+    badge.innerHTML = '<span class="status-dot"></span>Ollama';
+  }
+}
+
+// ===== Init =====
+loadCurrentPath();
+loadStats();
+updateWordCount();
+checkOllamaStatus();
+// Re-check Ollama every 30 seconds
+setInterval(checkOllamaStatus, 30000);
+</script>
+</body>
+</html>

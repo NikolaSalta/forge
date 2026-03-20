@@ -47,11 +47,17 @@ class PromptBuilder {
         chunks: List<String>,
         fileContents: Map<String, String>
     ): List<ChatMessage> {
-        val system = loadTemplate("task_system")
-            .substituteAll(mapOf("task_type" to taskType.displayName))
+        // Try task-specific system prompt first, fall back to generic
+        val taskTemplateName = taskType.name.lowercase()
+        val systemTemplate = tryLoadTemplate("${taskTemplateName}_system")
+            ?: tryLoadTemplate("system")
+            ?: loadTemplate("task_system")
+        val system = systemTemplate.substituteAll(mapOf("task_type" to taskType.displayName))
 
-        val formattedEvidence = if (evidence.isNotEmpty()) {
-            evidence.joinToString("\n") { "- $it" }
+        // Prioritize and filter evidence for better signal-to-noise
+        val prioritizedEvidence = prioritizeEvidence(evidence, taskType)
+        val formattedEvidence = if (prioritizedEvidence.isNotEmpty()) {
+            prioritizedEvidence.joinToString("\n") { "- $it" }
         } else {
             "(no additional evidence)"
         }
@@ -72,15 +78,17 @@ class PromptBuilder {
             "(no file contents included)"
         }
 
-        val user = loadTemplate("task_user")
-            .substituteAll(
-                mapOf(
-                    "task_type" to taskType.displayName,
-                    "evidence" to formattedEvidence,
-                    "context_chunks" to formattedChunks,
-                    "file_contents" to formattedFiles
-                )
+        // Try task-specific user prompt, fall back to generic
+        val userTemplate = tryLoadTemplate(taskTemplateName)
+            ?: loadTemplate("task_user")
+        val user = userTemplate.substituteAll(
+            mapOf(
+                "task_type" to taskType.displayName,
+                "evidence" to formattedEvidence,
+                "context_chunks" to formattedChunks,
+                "file_contents" to formattedFiles
             )
+        )
 
         return listOf(
             ChatMessage(role = "system", content = system),
@@ -176,7 +184,71 @@ Rules:
         )
     }
 
+    // ── Evidence prioritization ─────────────────────────────────────────────────
+
+    /**
+     * Prioritize evidence items for the prompt. For summary/analysis tasks,
+     * structural evidence (monorepo, build, languages) is most valuable.
+     * Import-level details (KEY_MODULES, INTEGRATION_POINTS) are capped
+     * to avoid drowning the architectural signal.
+     */
+    private fun prioritizeEvidence(evidence: List<String>, taskType: TaskType): List<String> {
+        // Evidence items arrive as "[CATEGORY:key] value"
+        // Priority order for analysis: MONOREPO > BUILD > LANGUAGES > CI_CD > DEPS > others
+        val highPriority = mutableListOf<String>()   // always included
+        val medPriority = mutableListOf<String>()     // included up to limit
+        val lowPriority = mutableListOf<String>()     // heavily capped
+
+        for (item in evidence) {
+            val upper = item.uppercase()
+            when {
+                upper.contains("MONOREPO_STRUCTURE") -> highPriority.add(item)
+                upper.contains("BUILD_SYSTEM") -> highPriority.add(item)
+                upper.contains("LANGUAGES") -> highPriority.add(item)
+                upper.contains("CI_CD_SIGNALS") -> highPriority.add(item)
+                upper.contains("DEPENDENCIES") -> highPriority.add(item)
+                upper.contains("SOURCE_ROOTS") -> medPriority.add(item)
+                upper.contains("TEST_ROOTS") -> medPriority.add(item)
+                upper.contains("RUNTIME_SHAPE") -> medPriority.add(item)
+                upper.contains("CONFIG_FILES") -> medPriority.add(item)
+                upper.contains("KEY_MODULES") -> lowPriority.add(item)
+                upper.contains("INTEGRATION_POINTS") -> lowPriority.add(item)
+                else -> medPriority.add(item)
+            }
+        }
+
+        // For analysis/overview tasks, cap low-priority items heavily
+        val isAnalysisTask = taskType.name in setOf(
+            "REPO_ANALYSIS", "PROJECT_OVERVIEW", "ARCHITECTURE_REVIEW",
+            "BUILD_AND_RUN_ANALYSIS", "CI_CD_ANALYSIS"
+        )
+
+        val result = mutableListOf<String>()
+        result.addAll(highPriority)
+        result.addAll(medPriority.take(20))
+        if (isAnalysisTask) {
+            result.addAll(lowPriority.take(10))  // cap to top 10 for summaries
+        } else {
+            result.addAll(lowPriority.take(30))  // more generous for code tasks
+        }
+
+        return result
+    }
+
     // ── Template loading ────────────────────────────────────────────────────────
+
+    /**
+     * Try to load a template, returning null if not found on the classpath.
+     */
+    private fun tryLoadTemplate(name: String): String? {
+        return templateCache.getOrPut("try:$name") {
+            val resourcePath = "prompts/$name.txt"
+            val stream = Thread.currentThread().contextClassLoader
+                ?.getResourceAsStream(resourcePath)
+                ?: PromptBuilder::class.java.classLoader?.getResourceAsStream(resourcePath)
+            stream?.bufferedReader()?.use { it.readText() } ?: ""
+        }.ifEmpty { null }
+    }
 
     /**
      * Load a template by name from resources/prompts/{name}.txt.

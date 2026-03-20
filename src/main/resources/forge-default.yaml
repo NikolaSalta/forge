@@ -24,7 +24,7 @@ workspace:
   max_chunks_per_file: 50
 
 retrieval:
-  max_context_chunks: 20
+  max_context_chunks: 40
   similarity_threshold: 0.65
   embedding_batch_size: 10
   scan_ignore:
@@ -82,5 +82,5 @@ scale:
   module_embedding_budget: 1000
   module_top_k: 5
   similarity_search_limit: 5000
-  token_budget: 6000
+  token_budget: 16000
   module_summary_cache: true

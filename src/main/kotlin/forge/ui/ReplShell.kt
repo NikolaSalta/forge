@@ -179,7 +179,7 @@ class ReplShell(
     private fun executeQuery(input: String, repoPath: Path) {
         try {
             val result = runBlocking {
-                orchestrator.execute(input, repoPath, attachedFiles.toList(), focusModule)
+                orchestrator.executeDecomposed(input, repoPath, attachedFiles.toList(), focusModule)
             }
 
             // Print trace

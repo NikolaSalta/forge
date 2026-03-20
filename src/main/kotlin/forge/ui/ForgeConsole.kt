@@ -13,6 +13,12 @@ import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.table.table
 import com.github.ajalt.mordant.terminal.Terminal
 import com.github.ajalt.mordant.widgets.Panel
+import forge.core.prompt.ContradictionSeverity
+import forge.core.prompt.DecompositionTracer
+import forge.core.prompt.ExecutionPlan
+import forge.core.prompt.PromptComplexity
+import forge.core.prompt.PromptPartition
+import forge.core.prompt.ReconciliationReport
 import forge.retrieval.GateResult
 import forge.workspace.EvidenceRecord
 
@@ -369,5 +375,92 @@ class ForgeConsole(private val showTrace: Boolean = true) {
      */
     fun promptWithModule(moduleName: String) {
         terminal.print(brightCyan("forge[$moduleName]> "))
+    }
+
+    // ── Decomposition trace ──────────────────────────────────────────────────
+
+    /**
+     * Shows the detected prompt complexity and archetype recognition results.
+     */
+    fun showPromptRecognition(complexity: PromptComplexity, archetypeCount: Int) {
+        if (!showTrace) return
+        terminal.println(dim("    Prompt complexity: ${complexity.name} ($archetypeCount archetype(s) detected)"))
+    }
+
+    /**
+     * Shows the execution plan: partitions and their layer assignments.
+     */
+    fun showExecutionPlan(plan: ExecutionPlan) {
+        if (!showTrace) return
+        terminal.println()
+        terminal.println(bold("Execution Plan"))
+        terminal.println(dim("  Complexity: ${plan.complexity.name} | Partitions: ${plan.partitionCount} | Layers: ${plan.executionLayers.size}"))
+        terminal.println(dim("  Primary archetype: ${plan.primaryArchetype.label}"))
+
+        for ((layerIdx, layer) in plan.executionLayers.withIndex()) {
+            val partitionLabels = layer.mapNotNull { id ->
+                plan.partitionById(id)?.let { "${it.id}: ${it.semanticLabel}" }
+            }
+            terminal.println(dim("  Layer $layerIdx: [${partitionLabels.joinToString(" | ")}]"))
+        }
+        terminal.println()
+    }
+
+    /**
+     * Shows that a partition has started execution.
+     */
+    fun showPartitionStart(partition: PromptPartition) {
+        if (!showTrace) return
+        terminal.println(dim("    [${partition.id}] Starting: ${partition.semanticLabel} (${partition.taskType.displayName})"))
+    }
+
+    /**
+     * Shows that a partition has completed.
+     */
+    fun showPartitionComplete(partition: PromptPartition, durationMs: Long) {
+        if (!showTrace) return
+        terminal.println(dim("    [${partition.id}] Completed in ${durationMs}ms"))
+    }
+
+    /**
+     * Shows reconciliation results if any issues were found.
+     */
+    fun showReconciliation(report: ReconciliationReport) {
+        if (!showTrace) return
+        terminal.println()
+        terminal.println(yellow("  Reconciliation: ${report.issueCount} issue(s) detected"))
+
+        for (c in report.contradictions) {
+            val text = "    [${c.severity}] ${c.description}"
+            when (c.severity) {
+                ContradictionSeverity.HIGH -> terminal.println(red(text))
+                ContradictionSeverity.MEDIUM -> terminal.println(yellow(text))
+                ContradictionSeverity.LOW -> terminal.println(dim(text))
+            }
+        }
+        for (m in report.missingArtifacts) {
+            terminal.println(yellow("    [MISSING] $m"))
+        }
+        for (u in report.unresolvedDeps) {
+            terminal.println(yellow("    [UNRESOLVED] $u"))
+        }
+        terminal.println()
+    }
+
+    /**
+     * Shows that synthesis is beginning.
+     */
+    fun showSynthesisStart() {
+        if (!showTrace) return
+        terminal.println(dim("    Synthesizing results from all partitions..."))
+    }
+
+    /**
+     * Shows the full decomposition trace timeline.
+     */
+    fun showDecompositionTrace(tracer: DecompositionTracer) {
+        if (!showTrace || tracer.isEmpty) return
+        terminal.println()
+        terminal.println(dim(tracer.summary()))
     }
 }

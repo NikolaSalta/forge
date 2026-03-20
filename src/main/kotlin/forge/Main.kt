@@ -24,9 +24,12 @@ import forge.voice.WhisperTranscriber
 import forge.voice.isModelDownloaded
 import forge.voice.recordUntilSilence
 import forge.workspace.ModuleRecord
+import forge.web.ForgeServer
 import forge.workspace.MultiRepoManager
 import forge.workspace.WorkspaceManager
 import kotlinx.coroutines.runBlocking
+import java.awt.Desktop
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -84,7 +87,8 @@ private fun buildServices(config: ForgeConfig): ForgeServices {
         modelSelector = modelSelector,
         promptBuilder = promptBuilder,
         fileProcessor = fileProcessor,
-        stateManager = stateManager
+        stateManager = stateManager,
+        console = console
     )
 
     return ForgeServices(
@@ -215,7 +219,7 @@ class AskCommand : CliktCommand(name = "ask") {
 
         try {
             val result = runBlocking {
-                services.orchestrator.execute(
+                services.orchestrator.executeDecomposed(
                     userInput = inputText,
                     repoPath = resolvedPath,
                     attachedFiles = filePaths
@@ -692,7 +696,7 @@ class FocusCommand : CliktCommand(name = "focus") {
 
         try {
             val result = runBlocking {
-                services.orchestrator.execute(
+                services.orchestrator.executeDecomposed(
                     question,
                     repoPath.toAbsolutePath().normalize(),
                     focusModule = moduleName
@@ -710,20 +714,90 @@ class FocusCommand : CliktCommand(name = "focus") {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+//  serve command — embedded web server
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Starts the FORGE embedded web server (Ktor/Netty).
+ * Serves both the REST API and the web UI on localhost.
+ * Replaces the previous Node.js server.js — no subprocess execution needed.
+ */
+class ServeCommand : CliktCommand(name = "serve") {
+    override fun help(context: com.github.ajalt.clikt.core.Context): String =
+        "Start the FORGE web dashboard server."
+
+    private val port by option("--port", "-p", help = "Port to listen on")
+        .default("3456")
+
+    private val noOpen by option("--no-open", help = "Don't open browser automatically")
+        .flag(default = false)
+
+    override fun run() {
+        val config = getConfig()
+        val services = buildServices(config)
+
+        val portNum = port.toIntOrNull() ?: 3456
+
+        val server = ForgeServer(
+            config = config,
+            ollamaClient = services.ollamaClient,
+            workspaceManager = services.workspaceManager,
+            modelSelector = services.modelSelector,
+            orchestrator = services.orchestrator,
+            port = portNum
+        )
+
+        // Install shutdown hook
+        Runtime.getRuntime().addShutdownHook(Thread {
+            println("\n  Shutting down FORGE server...")
+            server.stop()
+        })
+
+        server.start(wait = false)
+
+        // Open browser unless --no-open
+        if (!noOpen) {
+            try {
+                if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                    Desktop.getDesktop().browse(URI("http://localhost:$portNum"))
+                }
+            } catch (_: Exception) {
+                // Browser opening is best-effort
+            }
+        }
+
+        // Block main thread until shutdown
+        server.waitForShutdown()
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 //  Entry point
 // ═══════════════════════════════════════════════════════════════════════════════
 
-fun main(args: Array<String>) = ForgeCommand()
-    .subcommands(
-        AnalyzeCommand(),
-        AskCommand(),
-        ShellCommand(),
-        ModelsCommand(),
-        StatusCommand(),
-        ClearCommand(),
-        VoiceSetupCommand(),
-        IntelliJModulesCommand(),
-        ConnectCommand(),
-        FocusCommand()
-    )
-    .main(args)
+fun main(args: Array<String>) {
+    // Desktop mode: if launched with no args, start the web server
+    if (args.isEmpty()) {
+        ForgeCommand()
+            .subcommands(ServeCommand())
+            .main(arrayOf("serve"))
+        return
+    }
+
+    // CLI mode: normal Clikt command routing
+    ForgeCommand()
+        .subcommands(
+            AnalyzeCommand(),
+            AskCommand(),
+            ShellCommand(),
+            ModelsCommand(),
+            StatusCommand(),
+            ClearCommand(),
+            VoiceSetupCommand(),
+            IntelliJModulesCommand(),
+            ConnectCommand(),
+            FocusCommand(),
+            ServeCommand()
+        )
+        .main(args)
+}

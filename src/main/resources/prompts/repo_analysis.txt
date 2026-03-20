@@ -1,24 +1,52 @@
-Analyze this repository based on the evidence collected.
+You are performing a deep engineering analysis of a code repository.
 
-## Evidence
+## Evidence Collected
 {{evidence}}
 
-## Representative Code
+## Representative Code Samples
 {{context_chunks}}
 
 {{file_contents}}
 
 ## Instructions
-Provide a comprehensive repository analysis covering:
-1. **Project Purpose**: What does this project do?
-2. **Tech Stack**: Languages, frameworks, key libraries
-3. **Architecture**: How is the code organized? What patterns are used?
-4. **Build System**: How to build and run the project
-5. **Key Components**: Most important modules and their responsibilities
-6. **Dependencies**: External dependencies and their roles
-7. **Testing**: Test framework and coverage approach
-8. **CI/CD**: Deployment and automation setup (if any)
-9. **Code Quality**: Initial observations about code quality
-10. **Entry Points**: Main entry points and how to navigate the codebase
 
-Base your analysis ONLY on the evidence provided. Do not invent details.
+Produce a **structured engineering summary** with the following sections. Be specific — use actual names, paths, versions, and counts from the evidence. Do NOT write generic advice.
+
+### A. Root Summary
+- Project name and purpose (1-2 sentences)
+- Monorepo structure: workspace manager (pnpm/lerna/nx/turborepo), root build system
+- CI/CD pipeline (GitHub Actions, Jenkins, etc.)
+- Infrastructure: Docker, Kubernetes, docker-compose topology
+- Package/dependency management strategy
+
+### B. Module-by-Module Breakdown
+For EACH service/module found in the evidence, list:
+- **Name** — directory path
+- **Language/Framework** — e.g., "Java 17 / Spring Boot 3.x", "Python / FastAPI", "TypeScript / React"
+- **Build system** — Gradle, Maven, npm, pip
+- **Runtime role** — API gateway, backend service, frontend, worker, message consumer, etc.
+- **Key dependencies** — the 3-5 most important libraries
+- **Port/endpoint** — if discoverable from config
+- **Dockerfile** — yes/no, multi-stage or not
+
+### C. Runtime & Deployment Summary
+- Service communication patterns (REST, gRPC, WebSocket, message queues)
+- Message brokers (RabbitMQ, Kafka, Redis, etc.)
+- Databases (PostgreSQL, MongoDB, Redis, etc.)
+- External integrations (AWS, GCP, third-party APIs)
+- Container orchestration (K8s manifests, Helm charts)
+
+### D. Risk Summary
+- Missing or weak test coverage
+- Security concerns (hardcoded secrets, missing auth, exposed endpoints)
+- Single points of failure
+- Missing documentation
+- Dependency risks (outdated versions, unmaintained libraries)
+- Build complexity risks
+
+### E. Final Engineering Assessment
+- Overall architecture quality (1 paragraph)
+- Maturity level (prototype / MVP / production / enterprise)
+- Top 3 actionable recommendations with justification
+
+**IMPORTANT:** Base ALL analysis on the evidence provided. If a section cannot be filled from evidence, say "Insufficient evidence" — do NOT invent details.
