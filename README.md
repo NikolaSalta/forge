@@ -143,6 +143,38 @@ intellij:
   enabled: true                  # Enable for IntelliJ-scale repos
 ```
 
+## Runtime Model Switching
+
+You can switch any model role to any locally installed LLM **without restarting** FORGE:
+
+1. Open the **Config** tab in the web dashboard
+2. Each model role (Classify, Reason, Code, Embed, Summarize, Vision) shows a dropdown with all your installed Ollama models
+3. Select a different model — it takes effect immediately for the next query
+4. Overridden roles show an **override** badge and a **Reset** button to revert to the YAML default
+
+This is useful for:
+- Testing different models on the same query (e.g., `llama3.1:70b` vs `deepseek-r1:8b` for reasoning)
+- Temporarily using a larger model for complex analysis
+- Switching to a fine-tuned model from the Evolution system
+
+### Model Override API
+
+```bash
+# Set a model override
+curl -X POST http://localhost:3456/api/config/models \
+  -H 'Content-Type: application/json' \
+  -d '{"role": "REASON", "model": "llama3.1:70b"}'
+
+# View current overrides
+curl http://localhost:3456/api/config/models/overrides
+
+# Clear a specific override
+curl -X DELETE http://localhost:3456/api/config/models/REASON
+
+# Clear all overrides
+curl -X DELETE http://localhost:3456/api/config/models
+```
+
 ## Evidence System
 
 15+ detectors collect structural facts before any LLM call:
@@ -283,14 +315,18 @@ src/main/resources/
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/current-path` | Get current repo path |
-| POST | `/api/set-repo` | Set repository to analyze |
+| POST | `/api/set-path` | Set repository to analyze |
 | POST | `/api/ask/stream` | Send query with SSE streaming response |
 | GET | `/api/workspaces` | List all workspaces |
-| DELETE | `/api/workspaces/{hash}` | Delete a workspace |
-| GET | `/api/ollama/models` | List available Ollama models |
+| GET | `/api/models` | List available Ollama models |
 | GET | `/api/config` | Get current configuration |
-| GET | `/api/evolution/data` | Get training data |
-| GET | `/api/evolution/plan` | Get evolution plan |
+| GET | `/api/config/models/overrides` | Get runtime model overrides + defaults |
+| POST | `/api/config/models` | Set model override `{role, model}` |
+| DELETE | `/api/config/models/{role}` | Clear override for a role |
+| DELETE | `/api/config/models` | Clear all overrides |
+| GET | `/api/evolution/status` | Evolution status and readiness |
+| GET | `/api/evolution/training-data` | Paginated training data |
+| POST | `/api/evolution/build-dataset` | Export fine-tuning dataset |
 
 ## License
 

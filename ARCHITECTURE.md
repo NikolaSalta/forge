@@ -287,6 +287,29 @@ Browser: POST /api/ask/stream { query, repoPath }
         Browser: handleTraceEvent() updates trace panel + response area
 ```
 
+## Runtime Model Switching
+
+ModelSelector supports runtime overrides via a `ConcurrentHashMap<ModelRole, String>`:
+
+```
+selectForRole(role):
+  1. runtimeOverrides[role]  →  if set and available, use it
+  2. config.models[role]     →  YAML primary model
+  3. config.models.fallback  →  YAML fallback model
+  4. Return override or primary (caller gets Ollama error if missing)
+```
+
+Web UI flow:
+```
+Config tab dropdown onChange
+  → POST /api/config/models { role: "REASON", model: "llama3.1:70b" }
+  → ModelSelector.setOverride(REASON, "llama3.1:70b")
+  → Next query uses llama3.1:70b for all REASON tasks
+  → SSE trace shows "model_selected: llama3.1:70b"
+```
+
+Overrides are in-memory only (cleared on restart). For permanent changes, edit `forge.yaml`.
+
 ## Known Limitations
 
 1. **Embedding model context** — nomic-embed-text BERT has 2048 token limit; chunks > 1800 chars are truncated

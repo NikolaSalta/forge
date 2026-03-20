@@ -734,6 +734,53 @@
   .settings-row:last-child { border-bottom: none; }
   .settings-key { color: #8b949e; width: 240px; flex-shrink: 0; }
   .settings-val { color: #58a6ff; font-weight: 500; }
+  .model-select {
+    background: #0d1117;
+    color: #58a6ff;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    min-width: 220px;
+  }
+  .model-select:hover { border-color: #58a6ff; }
+  .model-select:focus { outline: none; border-color: #58a6ff; box-shadow: 0 0 0 2px rgba(88,166,255,0.2); }
+  .model-select.overridden { color: #d29922; border-color: #9e6a03; }
+  .model-override-badge {
+    display: inline-block;
+    font-size: 10px;
+    color: #d29922;
+    background: #1a1500;
+    border: 1px solid #9e6a03;
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-left: 8px;
+  }
+  .model-reset-btn {
+    background: none;
+    border: 1px solid #30363d;
+    color: #8b949e;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    margin-left: 8px;
+  }
+  .model-reset-btn:hover { color: #f85149; border-color: #da3633; }
+  .reset-all-btn {
+    background: #161b22;
+    border: 1px solid #30363d;
+    color: #8b949e;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  .reset-all-btn:hover { color: #f85149; border-color: #da3633; }
 
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
   @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
@@ -1744,22 +1791,36 @@ async function activateModel(name) {
 }
 
 // ===== Settings =====
+let _availableModels = [];
+let _modelOverrides = {};
+let _modelDefaults = {};
+
 async function loadSettings() {
   try {
-    const cfg = await fetchJSON('/api/config');
+    const [cfg, models, overridesData] = await Promise.all([
+      fetchJSON('/api/config'),
+      fetchJSON('/api/models'),
+      fetchJSON('/api/config/models/overrides')
+    ]);
+
+    _availableModels = models.map(m => m.name).sort();
+    _modelOverrides = overridesData.overrides || {};
+    _modelDefaults = overridesData.defaults || {};
+
     const container = document.getElementById('settingsContent');
-    const sections = {
+    const modelRoles = [
+      ['CLASSIFY', 'Classify', cfg.model_classify],
+      ['REASON', 'Reason', cfg.model_reason],
+      ['CODE', 'Code', cfg.model_code],
+      ['EMBED', 'Embed', cfg.model_embed],
+      ['SUMMARIZE', 'Summarize', cfg.model_summarize],
+      ['VISION', 'Vision', cfg.model_vision]
+    ];
+
+    const otherSections = {
       'Ollama': [
         ['Host', cfg.ollama_host],
         ['Timeout (seconds)', cfg.ollama_timeout]
-      ],
-      'Models': [
-        ['Classify', cfg.model_classify],
-        ['Reason', cfg.model_reason],
-        ['Code', cfg.model_code],
-        ['Embed', cfg.model_embed],
-        ['Summarize', cfg.model_summarize],
-        ['Vision', cfg.model_vision]
       ],
       'Workspace': [
         ['Base Dir', cfg.workspace_base_dir],
@@ -1785,7 +1846,43 @@ async function loadSettings() {
     };
 
     let html = '';
-    for (const [sectionName, rows] of Object.entries(sections)) {
+
+    // Models section with dropdowns
+    html += '<div class="settings-section"><div class="settings-section-title">Models <span style="font-weight:400;color:#8b949e;font-size:11px;">— select any installed LLM per role</span></div>';
+    for (const [role, label, configValue] of modelRoles) {
+      const override = _modelOverrides[role];
+      const current = override || configValue;
+      const isOverridden = !!override;
+
+      html += `<div class="settings-row"><span class="settings-key">${escHtml(label)}`;
+      if (isOverridden) html += `<span class="model-override-badge">override</span>`;
+      html += `</span><span class="settings-val">`;
+      html += `<select class="model-select${isOverridden ? ' overridden' : ''}" onchange="setModelOverride('${role}', this.value)">`;
+
+      for (const m of _availableModels) {
+        const selected = m === current ? ' selected' : '';
+        const isDefault = m === configValue;
+        html += `<option value="${escHtml(m)}"${selected}>${escHtml(m)}${isDefault ? ' (default)' : ''}</option>`;
+      }
+      // If current model not in available list, add it
+      if (!_availableModels.includes(current)) {
+        html += `<option value="${escHtml(current)}" selected>${escHtml(current)} (not available)</option>`;
+      }
+
+      html += `</select>`;
+      if (isOverridden) {
+        html += `<button class="model-reset-btn" onclick="clearModelOverride('${role}')">Reset</button>`;
+      }
+      html += `</span></div>`;
+    }
+    const hasAnyOverride = Object.keys(_modelOverrides).length > 0;
+    if (hasAnyOverride) {
+      html += `<div style="padding:8px 16px;text-align:right;"><button class="reset-all-btn" onclick="clearAllModelOverrides()">Reset All to Defaults</button></div>`;
+    }
+    html += '</div>';
+
+    // Other sections (read-only)
+    for (const [sectionName, rows] of Object.entries(otherSections)) {
       html += `<div class="settings-section"><div class="settings-section-title">${escHtml(sectionName)}</div>`;
       for (const [key, val] of rows) {
         html += `<div class="settings-row"><span class="settings-key">${escHtml(key)}</span><span class="settings-val">${escHtml(String(val))}</span></div>`;
@@ -1795,6 +1892,37 @@ async function loadSettings() {
     container.innerHTML = html;
   } catch(e) {
     document.getElementById('settingsContent').innerHTML = '<p style="color:#f85149;">Error loading config: ' + escHtml(e.message) + '</p>';
+  }
+}
+
+async function setModelOverride(role, model) {
+  try {
+    await fetchJSON('/api/config/models', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role, model })
+    });
+    loadSettings(); // Refresh to show override badge
+  } catch(e) {
+    alert('Error setting model: ' + e.message);
+  }
+}
+
+async function clearModelOverride(role) {
+  try {
+    await fetch('/api/config/models/' + role, { method: 'DELETE' });
+    loadSettings();
+  } catch(e) {
+    alert('Error clearing override: ' + e.message);
+  }
+}
+
+async function clearAllModelOverrides() {
+  try {
+    await fetch('/api/config/models', { method: 'DELETE' });
+    loadSettings();
+  } catch(e) {
+    alert('Error clearing overrides: ' + e.message);
   }
 }
 

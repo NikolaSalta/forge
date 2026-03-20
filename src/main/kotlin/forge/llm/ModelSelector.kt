@@ -5,11 +5,15 @@ import forge.ModelsConfig
 import forge.FallbackModels
 import forge.core.ModelRole
 import forge.core.TaskType
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Selects the appropriate Ollama model for a given task type or model role.
  * Checks model availability and falls back to a secondary model when the primary
  * is not pulled locally.
+ *
+ * Supports runtime overrides: the web UI can temporarily switch a model role
+ * to any locally available model without editing YAML or restarting.
  */
 class ModelSelector(
     private val config: ForgeConfig,
@@ -17,6 +21,9 @@ class ModelSelector(
 ) {
     @Volatile
     private var availableModels: Set<String>? = null
+
+    /** Runtime model overrides set via the web UI. Takes priority over YAML config. */
+    private val runtimeOverrides = ConcurrentHashMap<ModelRole, String>()
 
     /**
      * Select the best available model for the given [TaskType].
@@ -29,22 +36,54 @@ class ModelSelector(
 
     /**
      * Select the best available model for the given [ModelRole].
+     * Priority: runtime override → YAML config → fallback config.
      */
     suspend fun selectForRole(role: ModelRole): String {
+        // 1. Check runtime override first
+        val override = runtimeOverrides[role]
+        if (override != null && isModelAvailable(override)) {
+            return override
+        }
+
+        // 2. YAML config primary
         val primary = primaryModelForRole(role, config.models)
         if (isModelAvailable(primary)) {
             return primary
         }
 
+        // 3. YAML config fallback
         val fallback = fallbackModelForRole(role, config.models.fallback)
         if (fallback != null && isModelAvailable(fallback)) {
             return fallback
         }
 
-        // If neither primary nor fallback is available, return the primary name anyway.
+        // If nothing is available, return override or primary anyway.
         // The caller will get a clear Ollama error when it tries to use it.
-        return primary
+        return override ?: primary
     }
+
+    // ── Runtime override API ────────────────────────────────────────────────
+
+    /**
+     * Set a runtime model override for a role. Takes effect immediately
+     * for the next query — no restart required.
+     */
+    fun setOverride(role: ModelRole, modelName: String) {
+        runtimeOverrides[role] = modelName
+    }
+
+    /** Clear the runtime override for a role, reverting to YAML config. */
+    fun clearOverride(role: ModelRole) {
+        runtimeOverrides.remove(role)
+    }
+
+    /** Clear all runtime overrides. */
+    fun clearAllOverrides() {
+        runtimeOverrides.clear()
+    }
+
+    /** Returns the current runtime overrides (role → model name). */
+    fun getOverrides(): Map<ModelRole, String> = runtimeOverrides.toMap()
 
     /**
      * Refresh the cached set of locally available model names.

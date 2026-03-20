@@ -1,6 +1,7 @@
 package forge.web
 
 import forge.ForgeConfig
+import forge.core.ModelRole
 import forge.core.Orchestrator
 import forge.evolution.DatasetBuilder
 import forge.evolution.LocalModelRegistry
@@ -433,6 +434,56 @@ fun Routing.apiRoutes(
                 "evolution_quality_threshold" to config.evolution.qualityThreshold,
                 "evolution_product_model" to (config.evolution.productModel ?: "")
             ))
+        }
+
+        // ── Model override (runtime LLM switching) ─────────────────
+
+        get("/config/models/overrides") {
+            val overrides = modelSelector.getOverrides().mapKeys { it.key.name }
+            val defaults = mapOf(
+                "CLASSIFY" to config.models.classify,
+                "REASON" to config.models.reason,
+                "CODE" to config.models.code,
+                "EMBED" to config.models.embed,
+                "SUMMARIZE" to config.models.summarize,
+                "VISION" to config.models.vision
+            )
+            call.respond(ModelOverridesResponse(overrides = overrides, defaults = defaults))
+        }
+
+        post("/config/models") {
+            val body = call.receive<ModelOverrideRequest>()
+            val role = try {
+                ModelRole.valueOf(body.role.uppercase())
+            } catch (_: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid role: ${body.role}. Valid: ${ModelRole.entries.joinToString()}"))
+                return@post
+            }
+
+            if (body.model.isBlank()) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Model name cannot be empty"))
+                return@post
+            }
+
+            modelSelector.setOverride(role, body.model)
+            call.respond(SuccessResponse("Model override set: ${role.name} → ${body.model}"))
+        }
+
+        delete("/config/models/{role}") {
+            val roleName = call.parameters["role"] ?: ""
+            val role = try {
+                ModelRole.valueOf(roleName.uppercase())
+            } catch (_: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid role: $roleName"))
+                return@delete
+            }
+            modelSelector.clearOverride(role)
+            call.respond(SuccessResponse("Override cleared for ${role.name}"))
+        }
+
+        delete("/config/models") {
+            modelSelector.clearAllOverrides()
+            call.respond(SuccessResponse("All model overrides cleared"))
         }
 
         // ── Evolution endpoints ─────────────────────────────────────

@@ -37,6 +37,18 @@ data class ConfigUpdateRequest(
     val yaml: String
 )
 
+@Serializable
+data class ModelOverrideRequest(
+    val role: String,
+    val model: String
+)
+
+@Serializable
+data class ModelOverridesResponse(
+    val overrides: Map<String, String>,
+    val defaults: Map<String, String>
+)
+
 // ── Response models ──────────────────────────────────────────────────────────
 // Field names use camelCase to match the existing frontend JS expectations.
 
