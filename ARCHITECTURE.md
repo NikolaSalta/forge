@@ -1,309 +1,309 @@
-# FORGE v2 — Архитектура
+# FORGE v2 — Architecture
 
-## Обзор системы
+## System Overview
 
-FORGE — это pipeline-based CLI агент, который принимает пользовательский запрос, проводит его через цепочку стадий (intent resolution → scan → chunk → embed → evidence → context assembly → LLM call), и возвращает ответ, основанный на реальном коде репозитория.
+FORGE is a pipeline-based code intelligence platform with an embedded web server. User queries flow through a multi-stage pipeline (intent → scan → chunk → embed → evidence → context → LLM), with results streamed back via Server-Sent Events (SSE).
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                        Пользователь                              │
-│  forge focus platform/core-api /repo "What EPs does it define?" │
-└──────────────────────┬───────────────────────────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                     Main.kt (Clikt CLI)                          │
-│  Парсинг аргументов → buildServices() → orchestrator.execute()   │
-└──────────────────────┬───────────────────────────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                    Orchestrator.kt                                │
-│  1. resolveIntent(userInput) → TaskType                          │
-│  2. getOrCreate(workspace)                                       │
-│  3. buildPipeline(taskType)                                      │
-│  4. Execute stages sequentially                                  │
-│  5. Return ForgeResult                                           │
-└──────────────────────┬───────────────────────────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                      Pipeline.kt                                 │
-│                                                                  │
-│  ┌─────────┐  ┌──────────┐  ┌────────────────┐  ┌───────┐      │
-│  │ INTENT  │→│ WORKSPACE │→│ SCAN           │→│ CHUNK │       │
-│  │ 9-15s   │  │ <1s      │  │ 43ms (cached)  │  │ 253ms │      │
-│  └─────────┘  └──────────┘  └────────────────┘  └───────┘      │
-│                                                                  │
-│  ┌──────────────────┐  ┌───────┐  ┌──────────┐                  │
-│  │ MODULE_DISCOVERY │→│ EMBED │→│ EVIDENCE │                   │
-│  │ 69ms (cached)    │  │ 0ms*  │  │ 21s      │                  │
-│  └──────────────────┘  └───────┘  └──────────┘                  │
-│       * IntelliJ mode: skip global embed                         │
-│                                                                  │
-│  ┌──────────────────────┐  ┌──────────┐  ┌──────────┐           │
-│  │ CONTEXT_ASSEMBLY     │→│ LLM_CALL │→│ VALIDATE │           │
-│  │ 43-70s (lazy embed)  │  │ 115s     │  │ <1s      │           │
-│  └──────────────────────┘  └──────────┘  └──────────┘           │
-└──────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Browser (localhost:3456)                   │
+│  ┌──────┐  ┌───────────┐  ┌────────┐  ┌───────┐            │
+│  │ Chat │  │ Evolution │  │ Config │  │ About │            │
+│  └──┬───┘  └───────────┘  └────────┘  └───────┘            │
+│     │  POST /api/ask/stream                                  │
+│     │  ← SSE: stage_started, llm_token, analysis_progress   │
+└─────┼───────────────────────────────────────────────────────┘
+      │
+      ▼
+┌─────────────────────────────────────────────────────────────┐
+│              ForgeServer.kt (Ktor + Netty)                   │
+│  127.0.0.1:3456 — localhost only                             │
+│  CORS · HMAC · Rate Limiting · Input Sanitization            │
+├─────────────────────────────────────────────────────────────┤
+│              ApiRoutes.kt → Orchestrator                     │
+│  Channel<TraceEvent> bridges pipeline ↔ SSE response         │
+└─────┬───────────────────────────────────────────────────────┘
+      │
+      ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Orchestrator.kt                            │
+│                                                              │
+│  executeWithTrace(userInput, repoPath, traceChannel)         │
+│                                                              │
+│  1. INTENT         → IntentResolver → TaskType               │
+│  2. WORKSPACE      → WorkspaceManager → Database             │
+│  3. Pipeline stages (SCAN → CHUNK → EMBED → EVIDENCE → ...)  │
+│  4. LLM_CALL       → Standard streaming OR DeepAnalyzer      │
+│  5. VALIDATE       → ResponseParser.toMarkdown()             │
+│  6. TrainingDataCollector.collect()                           │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Ключевые компоненты
+## Pipeline Stages
 
-### 1. Intent Resolution (`IntentResolver.kt`)
+Built by `buildPipeline(taskType)` in `Pipeline.kt`. Each stage reads/writes to a shared `PipelineContext`.
 
-Классифицирует пользовательский запрос в один из 20 `TaskType`:
-- Отправляет запрос в classify-модель (`qwen3:1.7b`)
-- Получает JSON: `{ "task_type": "EXTENSION_POINT_IMPL", "confidence": 0.85 }`
-- TaskType определяет: какую LLM-модель использовать, какие evidence собирать, какой промпт
+| Stage | Component | What it does |
+|-------|-----------|-------------|
+| SCAN | RepoScanner | Walk file tree, insert file records into SQLite |
+| MODULE_DISCOVERY | IntelliJModuleResolver | Discover IntelliJ modules (when enabled) |
+| CHUNK | Chunker | Split source files into semantic chunks (80 lines, 10 overlap) |
+| EMBED | EmbeddingStore | Generate embeddings via `nomic-embed-text` (768-dim) |
+| EVIDENCE | EvidenceCollector | Run 15+ detectors (build system, languages, monorepo, etc.) |
+| CONTEXT_ASSEMBLY | EmbeddingStore + ContextAssembler | Find similar chunks via cosine similarity |
+| LLM_CALL | OllamaClient.chatStream() or DeepAnalyzer | Generate response with token-level streaming |
+| VALIDATE | ResponseParser | Strip thinking tags, normalize markdown |
 
-```kotlin
-enum class TaskType(
-    val displayName: String,
-    val generatesCode: Boolean = false,
-    val requiresDeepAnalysis: Boolean = false,
-    val modelRole: ModelRole = ModelRole.REASON
-)
+## SSE Streaming Architecture
+
+The `executeWithTrace()` method in Orchestrator uses a Kotlin `Channel<TraceEvent>` to bridge pipeline execution with SSE output:
+
+```
+Orchestrator (coroutine)          ApiRoutes (SSE writer)
+    │                                 │
+    ├── send(stageStarted)  ─────►   write("data: {...}\n\n")
+    ├── send(stageCompleted) ────►   write("data: {...}\n\n")
+    ├── send(modelSelected)  ────►   write("data: {...}\n\n")
+    ├── send(llmToken)       ────►   write("data: {...}\n\n")  × N
+    ├── send(analysisProgress) ──►   write("data: {...}\n\n")
+    └── send(done)           ────►   write("data: {...}\n\n")
 ```
 
-### 2. Workspace & Database (`Database.kt`)
+TraceEvent types:
+- `stage_started` / `stage_completed` — Pipeline stage lifecycle
+- `intent_resolved` — Task classification result
+- `model_selected` — Which Ollama model was chosen
+- `llm_token` — Individual token from streaming LLM response
+- `analysis_progress` — Deep analysis progress (module X of Y, percent)
+- `error` — Stage failure
+- `done` — Pipeline complete with final response
 
-SQLite WAL-mode база с 8 таблицами:
+## Deep Multi-Pass Analysis (DeepAnalyzer)
 
-```sql
-repos               -- Репозитории (primary + satellites)
-modules             -- IntelliJ модули (1438 записей)
-files               -- Файлы (180K записей), привязаны к module_id
-chunks              -- Чанки кода (598K), с embedding BLOB
-chunks_fts          -- FTS5 виртуальная таблица для полнотекстового поиска
-evidence            -- Обнаруженные факты о репо (4440 записей)
-tasks               -- История задач
-extension_points    -- IntelliJ extension points
+For REPO_ANALYSIS, PROJECT_OVERVIEW, and ARCHITECTURE_REVIEW tasks, the standard single LLM call is replaced by DeepAnalyzer:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                    DeepAnalyzer                            │
+│                                                          │
+│  1. discoverModules(evidence, files)                     │
+│     ├── Parse MONOREPO_STRUCTURE evidence keys           │
+│     │   "sub_service:microservices/alerts" → path        │
+│     └── Fallback: 2-level directory scan                 │
+│                                                          │
+│  2. FOR EACH module (with progress events):              │
+│     ├── Read all source files (48K char budget)          │
+│     │   Priority: build files > entry points > models    │
+│     │   > controllers > services > tests                 │
+│     ├── Build deep analysis prompt                       │
+│     ├── Stream LLM response (per-token SSE)              │
+│     ├── Cache to ~/.forge/workspaces/{hash}/analysis/    │
+│     └── Emit analysisProgress event                      │
+│                                                          │
+│  3. Synthesize all module analyses                        │
+│     ├── Combine module analyses (64K char budget)        │
+│     ├── Add repository-level evidence                    │
+│     ├── Stream synthesis LLM response                    │
+│     └── Cache to analysis/_SYNTHESIS.md                  │
+└──────────────────────────────────────────────────────────┘
 ```
 
-**Критические оптимизации:**
-- `PRAGMA journal_mode=WAL` — параллельное чтение/запись
-- `PRAGMA busy_timeout=30000` — защита от SQLITE_BUSY
-- Batch INSERT через `executeBatch()` (500 файлов за транзакцию)
-- `assignFilesToModules()` — SQL LIKE matching: `WHERE relative_path LIKE 'module_name/%'`
+Result: A 17-service monorepo gets 18 LLM calls (17 modules + 1 synthesis), producing exhaustive class-level, method-level, and dependency-level detail.
 
-### 3. IntelliJ Module System (`intellij/`)
+## Evidence Collection
 
-**IntelliJModuleResolver** обнаруживает модули через:
-1. `Files.walk()` → находит все `plugin.xml` и `.iml`
-2. Для каждого определяет module root (parent directory)
-3. Классифицирует по пути:
-   - `platform/*-api` → PLATFORM_API
-   - `platform/*-impl` → PLATFORM_IMPL
-   - `plugins/*` → PLUGIN
-   - `lib/*` → LIBRARY
-   - `**/test*` → TEST
-4. Парсит `plugin.xml` → extension points, services, dependencies
+`EvidenceCollector.kt` runs detectors based on TaskType requirements. Evidence is stored in SQLite with schema v2 path-qualified keys:
 
-**PluginXmlParser** — tolerant XML parser через `javax.xml.parsers.DocumentBuilderFactory`:
-- Извлекает `<extensionPoints>`, `<extensions>`, `<depends>`, `<applicationService>`
-- Обрабатывает malformed XML без крашей
+```
+category: MONOREPO_STRUCTURE
+key:      sub_service:microservices/alerts     ← unique per service
+value:    microservices/alerts: docker=yes, build=npm, lang=TypeScript(38), files=39
+```
 
-### 4. Hierarchical Retriever (`HierarchicalRetriever.kt`)
+Previous schema v1 used generic keys (`"sub_service"` for all services), causing map collisions. Schema v2 migration clears stale evidence on first run.
 
-**Проблема:** 598K чанков невозможно embedding-ить и искать целиком.
+Evidence categories:
+- `BUILD_SYSTEM` — Gradle, Maven, npm, pip, Cargo detection
+- `LANGUAGES` — Top languages by file count
+- `MONOREPO_STRUCTURE` — Sub-service discovery (3 levels deep)
+- `SOURCE_ROOTS` — Main source directories
+- `TEST_ROOTS` — Test directories and frameworks
+- `CI_CD_SIGNALS` — CI/CD pipeline detection
+- `DEPENDENCIES` — Key dependencies
+- `CONFIG_FILES` — Configuration file inventory
+- `KEY_MODULES` — Most important modules by size/connectivity
+- `INTEGRATION_POINTS` — API endpoints, message queues
 
-**Решение:** двухстадийный поиск:
+Evidence prioritization in `PromptBuilder.prioritizeEvidence()`:
+- **High priority** (always included): MONOREPO_STRUCTURE, BUILD_SYSTEM, LANGUAGES, CI_CD, DEPENDENCIES
+- **Medium priority** (capped at 20): SOURCE_ROOTS, TEST_ROOTS, CONFIG_FILES
+- **Low priority** (capped at 10-30): KEY_MODULES, INTEGRATION_POINTS
+
+## Retrieval Architecture
+
+### Non-IntelliJ repos (e.g., typical monorepos)
+
+Global embedding + cosine similarity:
+
+```
+EMBED stage: embedAllChunksAsync() → all chunks get embeddings
+CONTEXT_ASSEMBLY: findSimilarAsync(query, topK=40, threshold=0.50)
+  1. Generate query embedding via Ollama
+  2. Load all chunks WHERE embedding IS NOT NULL AND length(embedding) > 0
+  3. Compute cosine similarity for each
+  4. Return top-40 above threshold
+```
+
+### IntelliJ-scale repos (180K+ files)
+
+Two-stage hierarchical retrieval to avoid OOM:
 
 ```
 Stage 1: findRelevantModules(query, topK=5)
-├── Для каждого модуля: keyword score (совпадение с именем/путём/зависимостями)
-├── Если есть summary: embed(query) ⊗ embed(summary) → cosine similarity
-└── Rank по max(keyword, summary) → top-5 модулей
+  ├── Keyword match on module name/path/dependencies
+  ├── Summary embedding similarity (if module has AI summary)
+  └── Return top-5 modules
 
 Stage 2: findRelevantChunksInModules(query, modules)
-├── Lazy embedding: для каждого модуля embed до 1000 чанков (budget)
-├── Загрузить до 5000 чанков с эмбеддингами из SQLite
-├── Cosine similarity с query embedding
-└── Top-20 чанков → context assembly
+  ├── Lazy embedding: generate embeddings on-demand per module
+  ├── Load up to 5000 chunks with embeddings from selected modules
+  ├── Cosine similarity ranking
+  └── Return top-40 chunks
 ```
 
-**Ленивое эмбеддирование:**
-- Чанки эмбеддятся ТОЛЬКО когда модуль впервые запрашивается
-- `ByteArray(0)` маркер для failed chunks — не retry-ятся
-- `maxEmbedChars = 1800` — защита от overflow контекста BERT (2048 tokens)
+## Prompt Decomposition
 
-### 5. Evidence Collector (`EvidenceCollector.kt`)
-
-15+ детекторов, запускаемых в зависимости от TaskType:
-
-| Детектор | Что обнаруживает |
-|----------|-----------------|
-| `detectBuildSystem` | Gradle, Maven, Bazel, npm |
-| `detectLanguages` | Топ-5 языков по файлам |
-| `detectSourceRoots` | Корневые директории исходников |
-| `detectArchitecture` | MVC, microservices, layered |
-| `detectConventions` | camelCase vs snake_case, файловые паттерны |
-| `detectTestPatterns` | JUnit, TestNG, test-to-source ratio |
-| `detectAuthPatterns` | OAuth, JWT, session-based |
-| `detectApiEndpoints` | REST, GraphQL, gRPC |
-| `detectPsiPatterns` | PsiElement, Parser, Lexer |
-| `detectKeyFiles` | Крупнейшие файлы, entry points |
-| `detectModuleMap` | Структура модулей |
-| `detectCiCd` | GitHub Actions, Jenkins, GitLab CI |
-
-### 6. Context Assembly (`ContextAssembler.kt`)
-
-Token budget management — собирает контекст для LLM:
+Complex multi-part prompts (e.g., "analyze security AND generate tests AND review API design") are decomposed:
 
 ```
-Token Budget: 6000 tokens (~24K chars)
-├── Module context (plugin.xml, dependencies): ~500 tokens
-├── Evidence (build system, languages, patterns): ~500 tokens
-├── Attached files: variable
-└── Code chunks: fill remaining budget
+┌─────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│ PromptAnalyzer│ → │ ExecutionPlanner  │ → │ ParallelExecutor  │
+│ Complexity:   │    │ DAG of partitions │    │ Semaphore-limited │
+│ SIMPLE/       │    │ with dependencies │    │ concurrent LLM    │
+│ COMPOUND/     │    │                  │    │ calls             │
+│ MULTI_STAGE   │    │                  │    │                   │
+└─────────────┘    └──────────────────┘    └────────┬──────────┘
+                                                     │
+                                           ┌─────────▼──────────┐
+                                           │    Reconciler       │
+                                           │ Detect contradictions│
+                                           └─────────┬──────────┘
+                                                     │
+                                           ┌─────────▼──────────┐
+                                           │ ResultSynthesizer   │
+                                           │ Merge into unified  │
+                                           │ response            │
+                                           └────────────────────┘
 ```
 
-**Правила:**
-- Более релевантные чанки получают больше токенов
-- Module context включает: имя, тип, зависимости, extension points
-- Evidence включает: языки, архитектуру, паттерны
+## Model Evolution Subsystem
 
-### 7. Embedding Store (`EmbeddingStore.kt`)
+Collects training data from every interaction for future fine-tuning:
 
-Управляет embedding lifecycle:
-- **embed:** `OllamaClient.embed(model, text)` → `Float768Array` → `ByteArray` → SQLite BLOB
-- **search:** Load chunks → deserialize BLOB → `FloatArray` → cosine similarity
-- **truncation:** `maxEmbedChars = 1800` (nomic-embed-text BERT context = 2048 tokens)
-- **failed markers:** `ByteArray(0)` — чанк, который не удалось embedded (не retry)
-
-### 8. LLM Client (`OllamaClient.kt`)
-
-HTTP клиент к Ollama API (`java.net.http.HttpClient`):
-- `chat(model, messages, stream)` — генерация ответов
-- `embed(model, text)` — embedding (768-dim Float)
-- `listModels()` — доступные модели
-- Retry logic, timeout handling
-
-## Потоки данных
-
-### Первый запуск (cold start)
 ```
-User: forge focus platform/core-api /repo "What EPs?"
+User query + LLM response
   │
-  ├── INTENT: classify("What EPs?") → EXTENSION_POINT_IMPL (9s)
-  ├── WORKSPACE: getOrCreate → workspace.db (0.5s)
-  ├── SCAN: walkFileTree → 180,505 files → batch INSERT (3 min first time, 43ms cached)
-  ├── MODULE_DISCOVERY: discoverModules → 1438 modules → assignFilesToModules (33s first time, 69ms cached)
-  ├── CHUNK: split files → 597,984 chunks (30s first time, 253ms cached)
-  ├── EMBED: skip (IntelliJ lazy mode) (0ms)
-  ├── EVIDENCE: 15 detectors → 4440 evidence records (21s)
-  ├── CONTEXT_ASSEMBLY:
-  │     ├── findRelevantModules("What EPs?") → [platform/core-api]
-  │     ├── getChunksWithoutEmbedding(core-api, limit=1000) → 873 chunks
-  │     ├── embedChunksById(873 chunks) → 873 embeddings via Ollama (30s)
-  │     ├── findSimilarInModules(query, [core-api], limit=5000) → top-20 chunks
-  │     └── assemble(modules, chunks, evidence) → context (43s total)
-  ├── LLM_CALL: qwen2.5-coder:14b(context + question) → response (115s)
-  └── VALIDATE: clean response (0.1s)
+  ├── QualityScorer.score() → quality metrics
+  ├── TrainingDataFilter.filter() → PII removal
+  └── TrainingDataCollector.collect() → stored in workspace DB
+
+Later:
+  ├── DatasetBuilder.export() → fine-tuning dataset
+  └── ModelEvolutionPlanner.plan() → when to fine-tune
 ```
 
-### Повторный запуск (warm cache)
-```
-User: forge focus platform/core-api /repo "Show all services"
-  │
-  ├── INTENT: 9s
-  ├── WORKSPACE: 0.5s
-  ├── SCAN: 43ms (cached)
-  ├── MODULE_DISCOVERY: 69ms (cached)
-  ├── CHUNK: 253ms (cached)
-  ├── EMBED: 0ms (skip)
-  ├── EVIDENCE: 21s
-  ├── CONTEXT_ASSEMBLY: 10s (embeddings cached, only cosine similarity)
-  ├── LLM_CALL: 115s
-  └── VALIDATE: 0.1s
-  Total: ~2.5 min
-```
+## Database Schema
 
-## Схема базы данных
+SQLite with WAL mode, 8 tables:
 
 ```sql
-CREATE TABLE repos (
-    id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    local_path TEXT UNIQUE,
-    url TEXT,
-    branch TEXT,
-    is_primary BOOLEAN DEFAULT 1,
-    last_scan TEXT,
-    commit_sha TEXT
-);
-
-CREATE TABLE modules (
-    id INTEGER PRIMARY KEY,
-    repo_id INTEGER REFERENCES repos(id),
-    name TEXT NOT NULL,           -- "platform/core-api"
-    path TEXT NOT NULL,           -- absolute path
-    plugin_xml TEXT,              -- path to plugin.xml
-    module_type TEXT NOT NULL,    -- PLATFORM_API, PLUGIN, etc.
-    dependencies TEXT,            -- JSON array
-    summary TEXT,                 -- AI-generated summary
-    file_count INTEGER DEFAULT 0
-);
-
-CREATE TABLE files (
-    id INTEGER PRIMARY KEY,
-    repo_id INTEGER,
-    module_id INTEGER,           -- assigned via LIKE matching
-    relative_path TEXT NOT NULL,
-    language TEXT,
-    category TEXT,               -- source, test, config, build
-    size_bytes INTEGER,
-    last_modified TEXT,
-    content_hash TEXT
-);
-
-CREATE TABLE chunks (
-    id INTEGER PRIMARY KEY,
-    file_id INTEGER REFERENCES files(id),
-    chunk_index INTEGER,
-    start_line INTEGER,
-    end_line INTEGER,
-    content TEXT NOT NULL,
-    symbol_name TEXT,
-    language TEXT,
-    embedding BLOB              -- 768 floats × 4 bytes = 3072 bytes
-);
-
-CREATE VIRTUAL TABLE chunks_fts USING fts5(
-    content, symbol_name, language,
-    content=chunks, content_rowid=id
-);
+project_meta    -- Key-value store (schema version, scan status)
+repos           -- Repositories (primary + satellites)
+modules         -- IntelliJ modules (name, path, type, dependencies, summary)
+files           -- Source files (path, language, size, sha256, module_id)
+chunks          -- Code chunks (content, start/end line, symbol, embedding BLOB)
+chunks_fts      -- FTS5 virtual table for full-text search
+evidence        -- Detected facts (category, key, value) with UNIQUE constraint
+tasks           -- Query history (type, status, model, result)
 ```
 
-## Конфигурация (ScaleConfig)
+Key optimizations:
+- `PRAGMA journal_mode=WAL` — concurrent reads during writes
+- `PRAGMA busy_timeout=30000` — protect against SQLITE_BUSY
+- Batch INSERT (500 per transaction)
+- `INSERT OR IGNORE` for evidence deduplication
+- Evidence schema versioning for cache invalidation
 
-```yaml
-scale:
-  module_embedding_budget: 1000    # макс новых embeddings на модуль за запрос
-  module_top_k: 5                  # сколько модулей выбрать в Stage 1
-  similarity_search_limit: 5000    # макс чанков для cosine similarity
-  token_budget: 6000               # токен-бюджет для контекста LLM
-  parallel_scan_threads: 8         # потоки для параллельного скана
-  scan_batch_size: 500             # размер батча для INSERT
+## Security Model
+
+```
+┌─────────────────────────────────────┐
+│        ForgeServer                   │
+│  ┌─────────────────────────────┐    │
+│  │ 127.0.0.1 binding only      │    │
+│  │ (not accessible from LAN)   │    │
+│  ├─────────────────────────────┤    │
+│  │ CORS: localhost origins only │    │
+│  ├─────────────────────────────┤    │
+│  │ HMAC request signing         │    │
+│  ├─────────────────────────────┤    │
+│  │ Rate limiting                │    │
+│  ├─────────────────────────────┤    │
+│  │ Input sanitization           │    │
+│  │ (no shell, no SQL interp)   │    │
+│  └─────────────────────────────┘    │
+└─────────────────────────────────────┘
 ```
 
-## Известные ограничения
+All API endpoints call Kotlin services directly — no subprocess execution, no shell commands, no SQL string interpolation.
 
-1. **nomic-embed-text BERT context = 2048 tokens** — чанки длиннее 1800 символов обрезаются
-2. **Cosine similarity in-memory** — для 5000 чанков нужно ~15MB RAM, O(5000 × 768) операций
-3. **Первый запуск медленный** — сканирование 180K файлов + chunking занимает ~5 минут
-4. **SQLite single-writer** — параллельная запись ограничена WAL mode + busy_timeout
+## Data Flow: Complete Request Lifecycle
 
-## Решённые проблемы (E2E тестирование)
+```
+Browser: POST /api/ask/stream { query, repoPath }
+  │
+  ├─► ApiRoutes: Create Channel<TraceEvent>, launch orchestrator coroutine
+  │
+  ├─► Orchestrator.executeWithTrace():
+  │     ├── INTENT: qwen3:1.7b classifies → TaskType (e.g., REPO_ANALYSIS)
+  │     ├── WORKSPACE: getOrCreate → SQLite DB
+  │     ├── SCAN: Walk repo → 459 files (cached after first run)
+  │     ├── MODULE_DISCOVERY: IntelliJ modules (if enabled)
+  │     ├── CHUNK: Split into 2437 chunks (cached)
+  │     ├── EMBED: Generate 768-dim embeddings via nomic-embed-text
+  │     ├── EVIDENCE: 15+ detectors → 56 evidence items
+  │     ├── CONTEXT_ASSEMBLY: Cosine similarity → top-40 chunks
+  │     ├── LLM_CALL:
+  │     │     [Standard] chatStream(deepseek-r1:8b) → streaming tokens
+  │     │     [Deep Analysis] DeepAnalyzer:
+  │     │       ├── Discover 17 modules from evidence
+  │     │       ├── Analyze each module (17 LLM calls, streamed)
+  │     │       ├── Cache per-module results to disk
+  │     │       └── Synthesize final report (1 LLM call, streamed)
+  │     ├── VALIDATE: Strip thinking tags, normalize markdown
+  │     └── TrainingDataCollector: Record for evolution
+  │
+  └─► SSE stream: Each TraceEvent → "data: {json}\n\n" → Browser
+        Browser: handleTraceEvent() updates trace panel + response area
+```
 
-| Баг | Причина | Решение |
-|-----|---------|---------|
-| Бесконечный цикл embedding | Чанк не помечался как failed | `ByteArray(0)` маркер |
-| SQLITE_BUSY | Нет busy_timeout | `PRAGMA busy_timeout=30000` |
-| MODULE_DISCOVERY только для 2 типов | Условие в Pipeline.kt | Запуск для ВСЕХ типов |
-| Global EMBED на 597K чанков | Нет IntelliJ skip | Lazy per-module в CONTEXT_ASSEMBLY |
-| Файлы не привязаны к модулям | Нет assignFilesToModules | SQL UPDATE с LIKE matching |
-| file_count = 0 | Нет обновления после assign | UPDATE modules SET file_count = COUNT |
-| analyze зависает 30+ мин | 200K embeddings загружаются | LIMIT 5000 + moduleTopK=5 |
-| Embedding overflow | 8000 chars > 2048 tokens | maxEmbedChars = 1800 |
+## Known Limitations
+
+1. **Embedding model context** — nomic-embed-text BERT has 2048 token limit; chunks > 1800 chars are truncated
+2. **In-memory cosine similarity** — For non-IntelliJ repos, all embeddings are loaded into memory for search
+3. **SQLite single-writer** — WAL mode allows concurrent reads but only one writer at a time
+4. **First run is slow** — Scanning + chunking + embedding a large repo takes minutes
+5. **Ollama dependency** — All models must be pulled manually before use
+
+## Solved Issues
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| Evidence key collision | All sub-services stored under key "sub_service" | Path-qualified keys: "sub_service:microservices/alerts" |
+| 0 context chunks | Silent exception catch + missing length filter | Log errors + `AND length(embedding) > 0` SQL fix |
+| Wrong module names in deep analysis | DeepAnalyzer read evidence keys, not paths | Parse paths from new key format |
+| Duplicate evidence records | No unique constraint | `UNIQUE(task_id, category, key, value)` + `INSERT OR IGNORE` |
+| LLM tokens not streaming | Used blocking `chat()` instead of `chatStream()` | `executeStreamingLlmCall()` with Flow collection |
+| Infinite embedding loop | Failed chunks not marked | `ByteArray(0)` failed marker |
+| SQLITE_BUSY under load | No busy timeout | `PRAGMA busy_timeout=30000` |
+| OOM on 600K chunks | Global embedding load | Hierarchical two-stage retrieval with lazy embedding |
