@@ -39,7 +39,7 @@ data class WorkspaceConfig(
 
 data class RetrievalConfig(
     val maxContextChunks: Int = 40,
-    val similarityThreshold: Float = 0.65f,
+    val similarityThreshold: Float = 0.50f,
     val embeddingBatchSize: Int = 10,
     val scanIgnore: List<String> = listOf(
         "node_modules", ".git", "__pycache__", "build", "dist",
@@ -243,7 +243,7 @@ data class ForgeConfig(
                 ),
                 retrieval = RetrievalConfig(
                     maxContextChunks = (retrievalMap["max_context_chunks"] as? Number)?.toInt() ?: 20,
-                    similarityThreshold = (retrievalMap["similarity_threshold"] as? Number)?.toFloat() ?: 0.65f,
+                    similarityThreshold = (retrievalMap["similarity_threshold"] as? Number)?.toFloat() ?: 0.50f,
                     embeddingBatchSize = (retrievalMap["embedding_batch_size"] as? Number)?.toInt() ?: 10,
                     scanIgnore = (retrievalMap["scan_ignore"] as? List<*>)?.map { it.toString() }
                         ?: RetrievalConfig().scanIgnore

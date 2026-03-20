@@ -399,8 +399,14 @@ class Orchestrator(
                 "Created $chunkCount chunks"
             }
             "EMBED" -> {
-                val chunkCount = try { ctx.db.getChunkCount() } catch (_: Exception) { 0 }
-                "Embedded $chunkCount chunks"
+                val totalChunks = try { ctx.db.getChunkCount() } catch (_: Exception) { 0 }
+                val embeddedCount = try { ctx.db.getEmbeddingCount() } catch (_: Exception) { -1 }
+                if (embeddedCount >= 0) {
+                    "Embedded $embeddedCount of $totalChunks chunks" +
+                        if (totalChunks - embeddedCount > 0) " (${totalChunks - embeddedCount} failed/pending)" else ""
+                } else {
+                    "Embedded $totalChunks chunks"
+                }
             }
             "EVIDENCE" -> {
                 val evidenceCount = ctx.evidenceMap.size
@@ -410,7 +416,11 @@ class Orchestrator(
             }
             "CONTEXT_ASSEMBLY" -> {
                 val chunks = ctx.contextChunks.size
-                "Assembled $chunks context chunks"
+                if (chunks > 0) {
+                    "Assembled $chunks context chunks via embedding search"
+                } else {
+                    "Assembled 0 context chunks (embedding search returned no results)"
+                }
             }
             "LLM_CALL" -> {
                 val responseLen = ctx.llmResponse.length

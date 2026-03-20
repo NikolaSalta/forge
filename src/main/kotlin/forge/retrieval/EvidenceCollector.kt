@@ -1288,7 +1288,7 @@ class EvidenceCollector {
 
                     // Emit individual sub-service evidence item
                     val subDesc = "$dirName/$subName: ${subInfo.joinToString(", ")}"
-                    db.insertEvidence(taskId, EvidenceCategory.MONOREPO_STRUCTURE.name, "sub_service", subDesc)
+                    db.insertEvidence(taskId, EvidenceCategory.MONOREPO_STRUCTURE.name, "sub_service:$dirName/$subName", subDesc)
                     count++
 
                     // Also check for 3rd-level nested services (e.g. packages/backend/server-be)
@@ -1330,7 +1330,7 @@ class EvidenceCollector {
                                 nInfo.add("files=${nFiles.size}")
                             }
                             val nDesc = "$dirName/$subName/$nestedName: ${nInfo.joinToString(", ")}"
-                            db.insertEvidence(taskId, EvidenceCategory.MONOREPO_STRUCTURE.name, "sub_service", nDesc)
+                            db.insertEvidence(taskId, EvidenceCategory.MONOREPO_STRUCTURE.name, "sub_service:$dirName/$subName/$nestedName", nDesc)
                             count++
                         }
                     }
@@ -1346,7 +1346,7 @@ class EvidenceCollector {
                         append(" | sub-modules(${subServices.size}): ${subServices.joinToString(", ")}")
                     }
                 }
-                db.insertEvidence(taskId, EvidenceCategory.MONOREPO_STRUCTURE.name, "service_dir", description)
+                db.insertEvidence(taskId, EvidenceCategory.MONOREPO_STRUCTURE.name, "service_dir:$dirName", description)
                 services.add(dirName)
                 count++
             }

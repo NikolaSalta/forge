@@ -79,7 +79,8 @@ data class PipelineContext(
     var attachedFileContents: Map<String, String> = emptyMap(),
     var focusModule: String? = null,
     var moduleContext: String = "",
-    var relevantModuleNames: List<String> = emptyList()
+    var relevantModuleNames: List<String> = emptyList(),
+    var embeddedChunkCount: Int = -1
 )
 
 /**
@@ -289,7 +290,9 @@ fun buildPipeline(taskType: TaskType): List<PipelineStage> {
                     topK = ctx.config.retrieval.maxContextChunks,
                     threshold = ctx.config.retrieval.similarityThreshold
                 )
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                System.err.println("[CONTEXT_ASSEMBLY] Embedding search failed: ${e.message}")
+                e.printStackTrace(System.err)
                 emptyList()
             }
 

@@ -163,49 +163,83 @@ class DeepAnalyzer(
      * Discovers modules/services by combining:
      * - MONOREPO_STRUCTURE evidence (preferred, has sub-service paths)
      * - Top-level directory structure analysis (fallback)
+     *
+     * Evidence keys use the format "sub_service:microservices/alerts" where
+     * the path after the colon is the actual module directory path.
      */
     private fun discoverModules(
         db: Database,
         evidence: Map<String, String>,
         repoPath: Path
     ): List<String> {
-        val modules = mutableListOf<String>()
+        val modules = mutableSetOf<String>()
 
-        // Extract module paths from MONOREPO_STRUCTURE evidence
-        for ((key, _) in evidence) {
-            if (key.startsWith("MONOREPO_STRUCTURE:")) {
-                val subKey = key.removePrefix("MONOREPO_STRUCTURE:")
-                // Sub-service keys look like "microservices/alerts" or "packages/frontend"
-                if (subKey != "workspace_managers" && subKey != "docker_compose_services"
-                    && subKey != "top_level_structure" && !subKey.startsWith("top_level_")
-                ) {
-                    modules.add(subKey)
+        for ((key, value) in evidence) {
+            if (!key.startsWith("MONOREPO_STRUCTURE:")) continue
+            val subKey = key.removePrefix("MONOREPO_STRUCTURE:")
+
+            // NEW format: "sub_service:microservices/alerts"
+            if (subKey.startsWith("sub_service:")) {
+                val path = subKey.removePrefix("sub_service:")
+                if (path.isNotBlank()) modules.add(path)
+                continue
+            }
+
+            // Skip metadata keys and service_dir container entries
+            if (subKey.startsWith("service_dir:") ||
+                subKey == "workspace_managers" || subKey == "docker_compose_services" ||
+                subKey == "monorepo_summary" || subKey == "top_level_structure" ||
+                subKey.startsWith("top_level_")) {
+                continue
+            }
+
+            // BACKWARD COMPAT: old format "sub_service" with path in value
+            if (subKey == "sub_service") {
+                val path = value.substringBefore(":").trim()
+                if (path.isNotBlank() && path.contains("/")) {
+                    modules.add(path)
                 }
+                continue
             }
         }
 
         if (modules.isNotEmpty()) return modules.sorted()
 
-        // Fallback: discover from file structure
-        // Group files by their top-level directory
+        // Fallback: discover from file structure using two-level directory scan
         val allFiles = db.getAllFiles()
-        val topDirs = allFiles
-            .map { it.relativePath.split("/").firstOrNull() ?: "" }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .filter { dir ->
-                // Only include directories that contain source code
-                allFiles.any { f ->
-                    f.relativePath.startsWith("$dir/") &&
-                    f.language != null && f.language != "unknown"
+        val dirFileCount = mutableMapOf<String, Int>()
+
+        for (file in allFiles) {
+            if (file.language == null || file.language == "unknown") continue
+            val parts = file.relativePath.split("/")
+            if (parts.size >= 2) {
+                val topDir = parts[0]
+                dirFileCount[topDir] = (dirFileCount[topDir] ?: 0) + 1
+                if (parts.size >= 3) {
+                    val twoLevel = "${parts[0]}/${parts[1]}"
+                    dirFileCount[twoLevel] = (dirFileCount[twoLevel] ?: 0) + 1
                 }
             }
-            .sorted()
+        }
 
-        // If too few top-level dirs, treat entire repo as one module
-        if (topDirs.size <= 2) return emptyList()
+        // Prefer two-level paths (e.g. microservices/alerts) over top-level (e.g. microservices)
+        val candidates = mutableListOf<String>()
+        for ((path, count) in dirFileCount) {
+            if (count < 2) continue
+            val parts = path.split("/")
+            if (parts.size == 2) {
+                candidates.add(path)
+            } else if (parts.size == 1) {
+                // Top-level: only add if no two-level children exist
+                val hasChildren = dirFileCount.keys.any {
+                    it.startsWith("$path/") && it.split("/").size == 2
+                }
+                if (!hasChildren) candidates.add(path)
+            }
+        }
 
-        return topDirs
+        if (candidates.size <= 1) return emptyList()
+        return candidates.sorted()
     }
 
     // ── Per-module analysis ──────────────────────────────────────────────────

@@ -136,6 +136,7 @@ class Database(workspacePath: Path) {
             }
         }
         migrateFilesTable()
+        migrateEvidenceKeys()
         createFTS5()
     }
 
@@ -417,6 +418,39 @@ class Database(workspacePath: Path) {
         }
     }
 
+    /**
+     * Clear stale evidence that used non-unique keys (e.g. all sub-services stored
+     * under key "sub_service"). Evidence schema v2 uses path-qualified keys like
+     * "sub_service:microservices/alerts". Clearing forces re-collection on next run.
+     */
+    private fun migrateEvidenceKeys() {
+        synchronized(lock) {
+            val conn = getConnection()
+            val currentVersion = try {
+                conn.prepareStatement("SELECT value FROM project_meta WHERE key = ?").use { ps ->
+                    ps.setString(1, "evidence_schema_version")
+                    ps.executeQuery().use { rs ->
+                        if (rs.next()) rs.getString("value") else null
+                    }
+                }
+            } catch (_: Exception) { null }
+
+            if (currentVersion != "2") {
+                conn.createStatement().use { stmt ->
+                    stmt.execute("DELETE FROM evidence")
+                }
+                conn.prepareStatement(
+                    "INSERT OR REPLACE INTO project_meta (key, value, updated_at) VALUES (?, ?, ?)"
+                ).use { ps ->
+                    ps.setString(1, "evidence_schema_version")
+                    ps.setString(2, "2")
+                    ps.setString(3, java.time.Instant.now().toString())
+                    ps.executeUpdate()
+                }
+            }
+        }
+    }
+
     private fun createFTS5() {
         synchronized(lock) {
             try {
@@ -573,7 +607,7 @@ class Database(workspacePath: Path) {
         synchronized(lock) {
             val conn = getConnection()
             conn.createStatement().use { stmt ->
-                stmt.executeQuery("SELECT * FROM chunks WHERE embedding IS NOT NULL").use { rs ->
+                stmt.executeQuery("SELECT * FROM chunks WHERE embedding IS NOT NULL AND length(embedding) > 0").use { rs ->
                     return rs.toChunkRecords()
                 }
             }
