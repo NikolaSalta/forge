@@ -32,13 +32,13 @@ class DeepAnalyzer(
 
     companion object {
         /** Max characters of source code to send per module analysis call. */
-        private const val MODULE_FILE_BUDGET_CHARS = 48_000
+        private const val MODULE_FILE_BUDGET_CHARS = 512_000_000
 
         /** Max files to read per module (prioritize key files). */
-        private const val MAX_FILES_PER_MODULE = 60
+        private const val MAX_FILES_PER_MODULE = 500_000
 
         /** Max characters of module summaries to send for synthesis. */
-        private const val SYNTHESIS_BUDGET_CHARS = 64_000
+        private const val SYNTHESIS_BUDGET_CHARS = 512_000_000
     }
 
     // ── Data classes ─────────────────────────────────────────────────────────
@@ -76,9 +76,21 @@ class DeepAnalyzer(
         repoPath: Path,
         evidence: Map<String, String>,
         workspacePath: Path,
-        traceChannel: SendChannel<TraceEvent>?
+        traceChannel: SendChannel<TraceEvent>?,
+        clearCache: Boolean = false
     ): DeepAnalysisResult {
         val overallStart = System.currentTimeMillis()
+
+        // Clear cached analysis if requested
+        if (clearCache) {
+            val analysisDir = workspacePath.resolve("analysis")
+            if (Files.exists(analysisDir)) {
+                Files.list(analysisDir).use { stream ->
+                    stream.filter { it.toString().endsWith(".md") }
+                        .forEach { Files.deleteIfExists(it) }
+                }
+            }
+        }
 
         // 1. Discover modules from evidence + file structure
         val modules = discoverModules(db, evidence, repoPath)
@@ -523,7 +535,7 @@ Use markdown formatting with clear hierarchy."""
 
             // Include key evidence
             appendLine("## Repository-Level Evidence")
-            var evidenceBudget = 4000
+            var evidenceBudget = 32_000_000
             for ((key, value) in evidence) {
                 if (evidenceBudget <= 0) break
                 val line = "- **$key**: $value"

@@ -298,7 +298,8 @@ fun Routing.apiRoutes(
                 orchestrator.execute(
                     userInput = body.query,
                     repoPath = Path.of(repo),
-                    focusModule = body.module
+                    focusModule = body.module,
+                    forceReanalyze = body.forceReanalyze
                 )
             }
 
@@ -387,7 +388,8 @@ fun Routing.apiRoutes(
                         userInput = body.query,
                         repoPath = Path.of(repo),
                         traceChannel = traceChannel,
-                        focusModule = body.module
+                        focusModule = body.module,
+                        forceReanalyze = body.forceReanalyze
                     )
                 } catch (e: Exception) {
                     try {

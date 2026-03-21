@@ -73,7 +73,8 @@ class Orchestrator(
         userInput: String,
         repoPath: Path,
         attachedFiles: List<Path> = emptyList(),
-        focusModule: String? = null
+        focusModule: String? = null,
+        forceReanalyze: Boolean = false
     ): ForgeResult {
         val trace = mutableListOf<TraceEntry>()
         stateManager.clear()
@@ -202,7 +203,8 @@ class Orchestrator(
         userInput: String,
         repoPath: Path,
         traceChannel: SendChannel<TraceEvent>,
-        focusModule: String? = null
+        focusModule: String? = null,
+        forceReanalyze: Boolean = false
     ): ForgeResult {
         val trace = mutableListOf<TraceEntry>()
         val executionStart = System.currentTimeMillis()
@@ -261,7 +263,7 @@ class Orchestrator(
                 try {
                     if (stage.name == "LLM_CALL" && isDeepAnalysis) {
                         // ── Deep multi-pass analysis ─────────────────────────
-                        executeDeepAnalysis(context, traceChannel)
+                        executeDeepAnalysis(context, traceChannel, forceReanalyze)
                     } else if (stage.name == "LLM_CALL") {
                         // ── Streaming LLM call with token-level trace ────────
                         executeStreamingLlmCall(context, traceChannel)
@@ -335,7 +337,8 @@ class Orchestrator(
      */
     private suspend fun executeDeepAnalysis(
         ctx: PipelineContext,
-        traceChannel: SendChannel<TraceEvent>
+        traceChannel: SendChannel<TraceEvent>,
+        forceReanalyze: Boolean = false
     ) {
         ctx.selectedModel = ctx.modelSelector.selectForTask(ctx.taskType)
         traceChannel.send(TraceEvent.modelSelected(ctx.selectedModel))
@@ -346,7 +349,8 @@ class Orchestrator(
             repoPath = ctx.repoPath,
             evidence = ctx.evidenceMap,
             workspacePath = ctx.workspace.path,
-            traceChannel = traceChannel
+            traceChannel = traceChannel,
+            clearCache = forceReanalyze
         )
 
         ctx.llmResponse = result.synthesis

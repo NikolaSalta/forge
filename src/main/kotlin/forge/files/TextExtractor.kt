@@ -25,8 +25,8 @@ class TextExtractor : FileExtractor {
             FileType.CODE
         )
 
-        /** Maximum file size in bytes to read (10 MB). Larger files are truncated. */
-        private const val MAX_READ_BYTES = 10L * 1024 * 1024
+        /** Maximum file size in bytes to read (50,000 MB). Effectively unlimited. */
+        private const val MAX_READ_BYTES = 50_000L * 1024 * 1024
     }
 
     override fun supportedTypes(): Set<FileType> = SUPPORTED_TYPES

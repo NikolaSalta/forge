@@ -225,11 +225,11 @@ Rules:
 
         val result = mutableListOf<String>()
         result.addAll(highPriority)
-        result.addAll(medPriority.take(20))
+        result.addAll(medPriority.take(100_000))
         if (isAnalysisTask) {
-            result.addAll(lowPriority.take(10))  // cap to top 10 for summaries
+            result.addAll(lowPriority.take(50_000))
         } else {
-            result.addAll(lowPriority.take(30))  // more generous for code tasks
+            result.addAll(lowPriority.take(100_000))
         }
 
         return result

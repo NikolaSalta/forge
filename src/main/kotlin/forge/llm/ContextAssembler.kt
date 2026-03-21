@@ -77,13 +77,13 @@ class ContextAssembler(private val config: ForgeConfig) {
                 appendLine("## Focused Module: $focusModule")
             }
             appendLine("## Relevant IntelliJ Modules (${modules.size}):")
-            for (module in modules.take(10)) {
+            for (module in modules.take(50_000)) {
                 appendLine("- **${module.name}** [${module.moduleType ?: "unknown"}] (${module.fileCount} files)")
                 if (module.summary != null) {
-                    appendLine("  ${module.summary.take(200)}")
+                    appendLine("  ${module.summary.take(1_000_000)}")
                 }
                 if (module.dependencies != null) {
-                    appendLine("  Dependencies: ${module.dependencies.take(150)}")
+                    appendLine("  Dependencies: ${module.dependencies.take(500_000)}")
                 }
             }
         }
@@ -94,7 +94,7 @@ class ContextAssembler(private val config: ForgeConfig) {
 
         return buildString {
             appendLine("## Evidence:")
-            for ((key, value) in evidence.entries.take(20)) {
+            for ((key, value) in evidence.entries.take(100_000)) {
                 appendLine("- **$key**: $value")
             }
         }

@@ -17,13 +17,15 @@ data class AnalyzeRequest(
 @Serializable
 data class FocusRequest(
     val module: String = "platform/lang-api",
-    val query: String = "What are the main abstractions?"
+    val query: String = "What are the main abstractions?",
+    val forceReanalyze: Boolean = false
 )
 
 @Serializable
 data class AskRequest(
     val query: String,
-    val module: String? = null
+    val module: String? = null,
+    val forceReanalyze: Boolean = false
 )
 
 @Serializable

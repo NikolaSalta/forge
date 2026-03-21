@@ -31,14 +31,14 @@ data class FallbackModels(
 
 data class WorkspaceConfig(
     val baseDir: String = "~/.forge/workspaces",
-    val maxFileSizeKb: Int = 500,
-    val chunkMaxLines: Int = 80,
+    val maxFileSizeKb: Int = 2_048_000,
+    val chunkMaxLines: Int = 200_000,
     val chunkOverlapLines: Int = 10,
-    val maxChunksPerFile: Int = 50
+    val maxChunksPerFile: Int = 200_000
 )
 
 data class RetrievalConfig(
-    val maxContextChunks: Int = 40,
+    val maxContextChunks: Int = 200_000,
     val similarityThreshold: Float = 0.50f,
     val embeddingBatchSize: Int = 10,
     val scanIgnore: List<String> = listOf(
@@ -70,7 +70,7 @@ data class IntellijConfig(
         "platform/lang-api", "platform/lang-impl"
     ),
     val skipModules: List<String> = listOf("images"),
-    val maxModulesDeepScan: Int = 50,
+    val maxModulesDeepScan: Int = 500_000,
     val extensionPointCacheHours: Int = 24
 )
 
@@ -93,17 +93,17 @@ data class ScaleConfig(
     val scanBatchSize: Int = 500,
     val incrementalScan: Boolean = true,
     val fts5Enabled: Boolean = true,
-    val moduleEmbeddingBudget: Int = 1000,
-    val moduleTopK: Int = 5,
-    val similaritySearchLimit: Int = 5000,
-    val tokenBudget: Int = 16000,
+    val moduleEmbeddingBudget: Int = 8_000_000,
+    val moduleTopK: Int = 20,
+    val similaritySearchLimit: Int = 50_000_000,
+    val tokenBudget: Int = 128_000_000,
     val moduleSummaryCache: Boolean = true
 )
 
 data class DecompositionConfig(
     val enabled: Boolean = true,
-    val maxPartitions: Int = 8,
-    val maxParallelLlmCalls: Int = 3,
+    val maxPartitions: Int = 32_000,
+    val maxParallelLlmCalls: Int = 8_000,
     val synthesisEnabled: Boolean = true,
     val heuristicOnly: Boolean = false,
     val sessionTracking: Boolean = true
@@ -236,13 +236,13 @@ data class ForgeConfig(
                 ),
                 workspace = WorkspaceConfig(
                     baseDir = workspaceMap["base_dir"] as? String ?: "~/.forge/workspaces",
-                    maxFileSizeKb = (workspaceMap["max_file_size_kb"] as? Number)?.toInt() ?: 500,
-                    chunkMaxLines = (workspaceMap["chunk_max_lines"] as? Number)?.toInt() ?: 80,
+                    maxFileSizeKb = (workspaceMap["max_file_size_kb"] as? Number)?.toInt() ?: 2_048_000,
+                    chunkMaxLines = (workspaceMap["chunk_max_lines"] as? Number)?.toInt() ?: 200_000,
                     chunkOverlapLines = (workspaceMap["chunk_overlap_lines"] as? Number)?.toInt() ?: 10,
-                    maxChunksPerFile = (workspaceMap["max_chunks_per_file"] as? Number)?.toInt() ?: 50
+                    maxChunksPerFile = (workspaceMap["max_chunks_per_file"] as? Number)?.toInt() ?: 200_000
                 ),
                 retrieval = RetrievalConfig(
-                    maxContextChunks = (retrievalMap["max_context_chunks"] as? Number)?.toInt() ?: 20,
+                    maxContextChunks = (retrievalMap["max_context_chunks"] as? Number)?.toInt() ?: 200_000,
                     similarityThreshold = (retrievalMap["similarity_threshold"] as? Number)?.toFloat() ?: 0.50f,
                     embeddingBatchSize = (retrievalMap["embedding_batch_size"] as? Number)?.toInt() ?: 10,
                     scanIgnore = (retrievalMap["scan_ignore"] as? List<*>)?.map { it.toString() }
@@ -267,7 +267,7 @@ data class ForgeConfig(
                         ?: IntellijConfig().modulePriorities,
                     skipModules = (intellijMap["skip_modules"] as? List<*>)?.map { it.toString() }
                         ?: IntellijConfig().skipModules,
-                    maxModulesDeepScan = (intellijMap["max_modules_deep_scan"] as? Number)?.toInt() ?: 50,
+                    maxModulesDeepScan = (intellijMap["max_modules_deep_scan"] as? Number)?.toInt() ?: 500_000,
                     extensionPointCacheHours = (intellijMap["extension_point_cache_hours"] as? Number)?.toInt() ?: 24
                 ),
                 multiRepo = MultiRepoConfig(
@@ -282,16 +282,16 @@ data class ForgeConfig(
                     scanBatchSize = (scaleMap["scan_batch_size"] as? Number)?.toInt() ?: 500,
                     incrementalScan = scaleMap["incremental_scan"] as? Boolean ?: true,
                     fts5Enabled = scaleMap["fts5_enabled"] as? Boolean ?: true,
-                    moduleEmbeddingBudget = (scaleMap["module_embedding_budget"] as? Number)?.toInt() ?: 1000,
-                    moduleTopK = (scaleMap["module_top_k"] as? Number)?.toInt() ?: 5,
-                    similaritySearchLimit = (scaleMap["similarity_search_limit"] as? Number)?.toInt() ?: 5000,
-                    tokenBudget = (scaleMap["token_budget"] as? Number)?.toInt() ?: 6000,
+                    moduleEmbeddingBudget = (scaleMap["module_embedding_budget"] as? Number)?.toInt() ?: 8_000_000,
+                    moduleTopK = (scaleMap["module_top_k"] as? Number)?.toInt() ?: 20,
+                    similaritySearchLimit = (scaleMap["similarity_search_limit"] as? Number)?.toInt() ?: 50_000_000,
+                    tokenBudget = (scaleMap["token_budget"] as? Number)?.toInt() ?: 128_000_000,
                     moduleSummaryCache = scaleMap["module_summary_cache"] as? Boolean ?: true
                 ),
                 decomposition = DecompositionConfig(
                     enabled = decompMap["enabled"] as? Boolean ?: true,
-                    maxPartitions = (decompMap["max_partitions"] as? Number)?.toInt() ?: 8,
-                    maxParallelLlmCalls = (decompMap["max_parallel_llm_calls"] as? Number)?.toInt() ?: 3,
+                    maxPartitions = (decompMap["max_partitions"] as? Number)?.toInt() ?: 32_000,
+                    maxParallelLlmCalls = (decompMap["max_parallel_llm_calls"] as? Number)?.toInt() ?: 8_000,
                     synthesisEnabled = decompMap["synthesis_enabled"] as? Boolean ?: true,
                     heuristicOnly = decompMap["heuristic_only"] as? Boolean ?: false,
                     sessionTracking = decompMap["session_tracking"] as? Boolean ?: true
