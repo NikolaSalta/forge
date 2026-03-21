@@ -93,21 +93,21 @@ class IndexQueryService(private val db: Database) {
         val lastMeta = db.getLatestIndexMetadata("full")
             ?: db.getLatestIndexMetadata("incremental")
 
-        // Entity breakdown by type
+        // Entity breakdown by type — use COUNT(*) queries, not row loading
         val entitiesByType = mutableMapOf<String, Int>()
         for (type in listOf("class", "function", "method", "field", "interface", "enum", "constant", "object", "trait", "struct", "annotation", "data_class")) {
-            val count = db.getEntitiesByType(type, 1).size
+            val count = db.countEntitiesByType(type)
             if (count > 0 || type in listOf("class", "function", "method", "field")) {
-                entitiesByType[type] = db.getEntitiesByType(type, 100000).size
+                entitiesByType[type] = count
             }
         }
 
-        // Relationship breakdown
+        // Relationship breakdown — use COUNT(*) queries
         val relationshipsByType = mutableMapOf<String, Int>()
         for (type in listOf("imports", "calls", "extends", "implements", "overrides", "contains", "tests")) {
-            val count = db.getRelationshipsByType(type, 1).size
+            val count = db.countRelationshipsByType(type)
             if (count > 0) {
-                relationshipsByType[type] = db.getRelationshipsByType(type, 100000).size
+                relationshipsByType[type] = count
             }
         }
 

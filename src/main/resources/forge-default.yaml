@@ -7,8 +7,8 @@ models:
   classify: "qwen3:1.7b"
   reason: "deepseek-r1:8b"
   code: "qwen2.5-coder:14b"
-  embed: "nomic-embed-text"
-  summarize: "ministral-3:8b"
+  embed: "qwen3-embedding:0.6b"
+  summarize: "qwen2.5:14b"
   vision: "qwen2.5vl:7b"
   fallback:
     classify: "deepseek-r1:1.5b"
@@ -24,7 +24,7 @@ workspace:
   max_chunks_per_file: 200000
 
 retrieval:
-  max_context_chunks: 200000
+  max_context_chunks: 50
   similarity_threshold: 0.50
   embedding_batch_size: 10
   scan_ignore:
@@ -54,20 +54,6 @@ ui:
   show_evidence: true
   streaming: true
 
-intellij:
-  enabled: true
-  module_priorities:
-    - "platform/platform-api"
-    - "platform/platform-impl"
-    - "platform/core-api"
-    - "platform/core-impl"
-    - "platform/lang-api"
-    - "platform/lang-impl"
-  skip_modules:
-    - "images"
-  max_modules_deep_scan: 500000
-  extension_point_cache_hours: 24
-
 multi_repo:
   satellites: []
   auto_clone: false
@@ -84,3 +70,27 @@ scale:
   similarity_search_limit: 50000000
   token_budget: 128000000
   module_summary_cache: true
+
+evolution:
+  enabled: true
+  collect_training_data: true
+  auto_validate_on_success: true
+  quality_threshold: 0.6
+  model_export_dir: "~/.forge/models/exports"
+  dataset_format: "jsonl"
+  pii_filter_enabled: true
+
+agents:
+  enabled: true
+  always_hot:
+    - "qwen3:1.7b"
+    - "deepseek-r1:8b"
+  specialist_models:
+    CODE: "qwen2.5-coder:14b"
+    EMBED: "qwen3-embedding:0.6b"
+    SUMMARIZE: "qwen2.5:14b"
+    VISION: "qwen2.5vl:7b"
+  preload_on_startup: true
+  max_total_memory_gb: 12.0
+  heavy_model_threshold_gb: 6.0
+  keep_alive_minutes: 10

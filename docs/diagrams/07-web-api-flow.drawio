@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="draw.io">
+  <diagram name="Web API Request Flow" id="web-007">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="Web API Request Flow" style="text;html=1;fontSize=20;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="300" y="10" width="500" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Browser -->
+        <mxCell id="browser" value="&lt;b&gt;Browser&lt;/b&gt;&lt;br&gt;(FORGE Web UI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="50" y="80" width="160" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- HTTP Request -->
+        <mxCell id="http" value="&lt;b&gt;HTTP Request&lt;/b&gt;&lt;br&gt;GET/POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="280" y="80" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Ktor Server -->
+        <mxCell id="ktor" value="&lt;b&gt;ForgeServer&lt;/b&gt;&lt;br&gt;(Ktor/Netty)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="490" y="80" width="160" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ApiRoutes -->
+        <mxCell id="routes" value="&lt;b&gt;ApiRoutes.kt&lt;/b&gt;&lt;br&gt;Route definitions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="720" y="80" width="160" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Arrows for top row -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;" edge="1" source="browser" target="http" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;" edge="1" source="http" target="ktor" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;" edge="1" source="ktor" target="routes" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Route Endpoints -->
+        <mxCell id="route_header" value="&lt;b&gt;API Endpoints&lt;/b&gt;" style="text;html=1;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="180" width="200" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ep1" value="&lt;b&gt;GET /api/status&lt;/b&gt;&lt;br&gt;Health + model status" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="50" y="220" width="170" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="ep2" value="&lt;b&gt;POST /api/ask&lt;/b&gt;&lt;br&gt;Sync query" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="240" y="220" width="170" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="ep3" value="&lt;b&gt;POST /api/ask/stream&lt;/b&gt;&lt;br&gt;SSE streaming query" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="430" y="220" width="170" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="ep4" value="&lt;b&gt;GET /api/models&lt;/b&gt;&lt;br&gt;List available models" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="620" y="220" width="170" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="ep5" value="&lt;b&gt;GET /api/index/status&lt;/b&gt;&lt;br&gt;Index state" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="810" y="220" width="170" height="45" as="geometry" />
+        </mxCell>
+
+        <!-- SSE Streaming Detail -->
+        <mxCell id="sse_title" value="&lt;b&gt;SSE Streaming Path (/api/ask/stream)&lt;/b&gt;" style="text;html=1;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="310" width="400" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sse1" value="&lt;b&gt;POST /api/ask/stream&lt;/b&gt;&lt;br&gt;{query, projectPath}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="50" y="350" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="sse2" value="&lt;b&gt;Service Layer&lt;/b&gt;&lt;br&gt;Orchestrator&lt;br&gt;Pipeline execution" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="280" y="350" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="sse3" value="&lt;b&gt;OllamaClient&lt;/b&gt;&lt;br&gt;chatStream()&lt;br&gt;Kotlin Flow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="510" y="350" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="sse4" value="&lt;b&gt;Ollama API&lt;/b&gt;&lt;br&gt;POST /api/chat&lt;br&gt;stream: true" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="740" y="350" width="170" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="es1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#b85450;" edge="1" source="sse1" target="sse2" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="es2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#6c8ebf;" edge="1" source="sse2" target="sse3" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="es3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#82b366;" edge="1" source="sse3" target="sse4" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Response flow back -->
+        <mxCell id="resp1" value="&lt;b&gt;NDJSON chunks&lt;/b&gt;" style="text;html=1;fontSize=10;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="740" y="420" width="170" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="resp2" value="&lt;b&gt;Flow&amp;lt;String&amp;gt;&lt;/b&gt;" style="text;html=1;fontSize=10;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="510" y="420" width="170" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="resp3" value="&lt;b&gt;SSE events&lt;/b&gt;&lt;br&gt;data: {token}" style="text;html=1;fontSize=10;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="280" y="420" width="170" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- SSE to Browser -->
+        <mxCell id="sse_back" value="&lt;b&gt;EventSource&lt;/b&gt;&lt;br&gt;SSE stream to browser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="50" y="460" width="170" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="es4" value="SSE" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#d6b656;dashed=1;" edge="1" source="sse2" target="sse_back" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="365" y="440" />
+              <mxPoint x="135" y="440" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

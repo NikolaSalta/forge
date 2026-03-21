@@ -30,7 +30,7 @@ class ProjectIndexCoordinator(
      * Run full absolute index build.
      */
     fun buildFullIndex(
-        onProgress: ((phase: String, detail: String) -> Unit)? = null
+        onProgress: ((phase: String, detail: String, current: Int, total: Int) -> Unit)? = null
     ): IndexBuildReport {
         val startTime = System.currentTimeMillis()
         val metaId = db.insertIndexMetadata("full", "running", "full")
@@ -39,11 +39,12 @@ class ProjectIndexCoordinator(
         var relationshipsFound = 0
         var linesIndexed = 0
         var filesProcessed = 0
+        val totalFiles = db.getFileCount()
         val errors = mutableListOf<String>()
 
         try {
             // Phase 1: File classification
-            onProgress?.invoke("CLASSIFICATION", "Classifying project files...")
+            onProgress?.invoke("CLASSIFICATION", "Classifying project files...", 0, totalFiles)
             val classStats = try {
                 fileClassification.classifyAll(db, repoPath)
             } catch (e: Exception) {
@@ -51,51 +52,52 @@ class ProjectIndexCoordinator(
                 emptyMap()
             }
             filesProcessed = classStats.values.sum()
-            onProgress?.invoke("CLASSIFICATION", "Classified $filesProcessed files")
+            onProgress?.invoke("CLASSIFICATION", "Classified $filesProcessed files", filesProcessed, totalFiles)
 
             // Phase 2: Entity extraction
-            onProgress?.invoke("ENTITY_EXTRACTION", "Extracting code entities...")
+            onProgress?.invoke("ENTITY_EXTRACTION", "Extracting code entities...", 0, totalFiles)
             entitiesFound = try {
                 entityExtraction.extractAll(db, repoPath, batchSize = 500) { processed, found ->
-                    onProgress?.invoke("ENTITY_EXTRACTION", "Processed $processed files, found $found entities")
+                    onProgress?.invoke("ENTITY_EXTRACTION", "Processed $processed files, found $found entities", processed, totalFiles)
                 }
             } catch (e: Exception) {
                 errors.add("Entity extraction failed: ${e.message}")
                 0
             }
-            onProgress?.invoke("ENTITY_EXTRACTION", "Extracted $entitiesFound entities")
+            onProgress?.invoke("ENTITY_EXTRACTION", "Extracted $entitiesFound entities", totalFiles, totalFiles)
 
             // Phase 3: Relationship graph
-            onProgress?.invoke("RELATIONSHIPS", "Building relationship graph...")
+            onProgress?.invoke("RELATIONSHIPS", "Building relationship graph...", 0, totalFiles)
             relationshipsFound = try {
                 relationshipGraph.buildAll(db, repoPath)
             } catch (e: Exception) {
                 errors.add("Relationship building failed: ${e.message}")
                 0
             }
-            onProgress?.invoke("RELATIONSHIPS", "Built $relationshipsFound relationships")
+            onProgress?.invoke("RELATIONSHIPS", "Built $relationshipsFound relationships", relationshipsFound, relationshipsFound)
 
             // Phase 4: Line index
-            onProgress?.invoke("LINE_INDEX", "Building line-level index...")
+            onProgress?.invoke("LINE_INDEX", "Building line-level index...", 0, totalFiles)
             linesIndexed = try {
                 lineIndex.buildAll(db, repoPath)
             } catch (e: Exception) {
                 errors.add("Line index failed: ${e.message}")
                 0
             }
-            onProgress?.invoke("LINE_INDEX", "Indexed $linesIndexed lines")
+            onProgress?.invoke("LINE_INDEX", "Indexed $linesIndexed lines", linesIndexed, linesIndexed)
 
             // Phase 5: Dependency graph
-            onProgress?.invoke("DEPENDENCY_GRAPH", "Building dependency graph...")
+            onProgress?.invoke("DEPENDENCY_GRAPH", "Building dependency graph...", 0, 1)
+            var depsFound = 0
             try {
-                dependencyGraph.buildGraph(db)
+                depsFound = dependencyGraph.buildGraph(db)
             } catch (e: Exception) {
                 errors.add("Dependency graph failed: ${e.message}")
             }
-            onProgress?.invoke("DEPENDENCY_GRAPH", "Dependency graph complete")
+            onProgress?.invoke("DEPENDENCY_GRAPH", "Built $depsFound dependency edges", depsFound, depsFound)
 
             // Phase 6: Resolve relationship targets
-            onProgress?.invoke("RESOLUTION", "Resolving relationship targets...")
+            onProgress?.invoke("RESOLUTION", "Resolving relationship targets...", 0, 1)
             try {
                 db.resolveRelationshipTargets()
             } catch (e: Exception) {
@@ -117,7 +119,7 @@ class ProjectIndexCoordinator(
             db.setMeta("index_version", "1")
             db.setMeta("index_built_at", Instant.now().toString())
 
-            onProgress?.invoke("COMPLETE", "Absolute index ready: $entitiesFound entities, $relationshipsFound relationships")
+            onProgress?.invoke("COMPLETE", "Absolute index ready: $entitiesFound entities, $relationshipsFound relationships", 0, 0)
 
         } catch (e: Exception) {
             val duration = System.currentTimeMillis() - startTime

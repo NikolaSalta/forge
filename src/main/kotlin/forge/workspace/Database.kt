@@ -2386,6 +2386,66 @@ class Database(workspacePath: Path) {
         }
     }
 
+    // ── Efficient COUNT queries (no row loading) ──────────────────
+
+    fun countEntitiesByType(entityType: String): Int {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT COUNT(*) FROM entities WHERE entity_type = ?").use { ps ->
+                ps.setString(1, entityType)
+                ps.executeQuery().use { rs ->
+                    return if (rs.next()) rs.getInt(1) else 0
+                }
+            }
+        }
+    }
+
+    fun countRelationshipsByType(relationship: String): Int {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT COUNT(*) FROM entity_relationships WHERE relationship = ?").use { ps ->
+                ps.setString(1, relationship)
+                ps.executeQuery().use { rs ->
+                    return if (rs.next()) rs.getInt(1) else 0
+                }
+            }
+        }
+    }
+
+    /**
+     * Single JOIN query to aggregate import relationships into directory-level dependency edges.
+     * Returns (sourceDir, targetPackage, count) triples.
+     * Much faster than N+1 lookups for large repos.
+     */
+    fun aggregateDependencyEdges(): List<Triple<String, String, Int>> {
+        synchronized(lock) {
+            val conn = getConnection()
+            val sql = """
+                SELECT f.relative_path, r.target_name
+                FROM entity_relationships r
+                JOIN entities e ON r.source_entity_id = e.id
+                JOIN files f ON e.file_id = f.id
+                WHERE r.relationship = 'imports'
+            """
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery(sql).use { rs ->
+                    val edges = mutableMapOf<Pair<String, String>, Int>()
+                    while (rs.next()) {
+                        val filePath = rs.getString(1)
+                        val target = rs.getString(2)
+                        val sourceDir = filePath.split("/").take(2).joinToString("/")
+                        val targetDir = target.split(".").take(2).joinToString(".")
+                        if (sourceDir.isNotBlank() && targetDir.isNotBlank() && sourceDir != targetDir) {
+                            val key = Pair(sourceDir, targetDir)
+                            edges[key] = (edges[key] ?: 0) + 1
+                        }
+                    }
+                    return edges.map { (k, v) -> Triple(k.first, k.second, v) }
+                }
+            }
+        }
+    }
+
     // ── File Classification CRUD ─────────────────────────────────
 
     fun insertFileClassification(

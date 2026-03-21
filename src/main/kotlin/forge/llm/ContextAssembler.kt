@@ -76,7 +76,7 @@ class ContextAssembler(private val config: ForgeConfig) {
             if (focusModule != null) {
                 appendLine("## Focused Module: $focusModule")
             }
-            appendLine("## Relevant IntelliJ Modules (${modules.size}):")
+            appendLine("## Relevant Project Modules (${modules.size}):")
             for (module in modules.take(50_000)) {
                 appendLine("- **${module.name}** [${module.moduleType ?: "unknown"}] (${module.fileCount} files)")
                 if (module.summary != null) {

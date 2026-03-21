@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="draw.io">
+  <diagram name="FORGE Architecture Layers" id="arch-001">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="FORGE Architecture Layers" style="text;html=1;fontSize=20;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="300" y="10" width="500" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- CLI Layer -->
+        <mxCell id="cli" value="&lt;b&gt;CLI Layer&lt;/b&gt;&lt;br&gt;Main.kt | Commands | ArgParser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="250" y="60" width="600" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Web Layer -->
+        <mxCell id="web" value="&lt;b&gt;Web Layer&lt;/b&gt;&lt;br&gt;ForgeServer | ApiRoutes | WebState | SSE Streaming" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="250" y="130" width="600" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Core Layer -->
+        <mxCell id="core" value="&lt;b&gt;Core Layer&lt;/b&gt;&lt;br&gt;Orchestrator | Pipeline | IntentResolver | DeepAnalyzer | PromptAnalyzer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="250" y="200" width="600" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- LLM Layer -->
+        <mxCell id="llm" value="&lt;b&gt;LLM Layer&lt;/b&gt;&lt;br&gt;OllamaClient | ModelSelector | AgentOrchestrator | ResponseParser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="100" y="280" width="400" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Retrieval Layer -->
+        <mxCell id="retrieval" value="&lt;b&gt;Retrieval Layer&lt;/b&gt;&lt;br&gt;RepoScanner | Chunker | HierarchicalRetriever | EvidenceCollector" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="520" y="280" width="430" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Index Layer -->
+        <mxCell id="index" value="&lt;b&gt;Index Layer&lt;/b&gt;&lt;br&gt;ProjectIndexCoordinator | EntityExtraction | RelationshipGraph | LineIndex" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="100" y="360" width="450" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Storage Layer -->
+        <mxCell id="storage" value="&lt;b&gt;Storage Layer&lt;/b&gt;&lt;br&gt;Database/SQLite | WorkspaceManager | EmbeddingStore" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="250" y="440" width="600" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Evolution Layer -->
+        <mxCell id="evolution" value="&lt;b&gt;Evolution Layer&lt;/b&gt;&lt;br&gt;TrainingDataCollector | QualityScorer | DatasetBuilder | LocalModelRegistry" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="570" y="360" width="380" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Arrows: CLI → Web -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#666666;" edge="1" source="cli" target="web" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Web → Core -->
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#666666;" edge="1" source="web" target="core" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Core → LLM -->
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#6c8ebf;" edge="1" source="core" target="llm" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Core → Retrieval -->
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#6c8ebf;" edge="1" source="core" target="retrieval" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- LLM → Storage -->
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#82b366;" edge="1" source="llm" target="storage" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Retrieval → Storage -->
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#82b366;" edge="1" source="retrieval" target="storage" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Index → Storage -->
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#9673a6;" edge="1" source="index" target="storage" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Evolution → Storage -->
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#9673a6;" edge="1" source="evolution" target="storage" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Core → Index -->
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#6c8ebf;dashed=1;" edge="1" source="core" target="index" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Retrieval → Index -->
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#82b366;dashed=1;" edge="1" source="retrieval" target="index" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

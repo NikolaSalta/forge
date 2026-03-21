@@ -784,6 +784,26 @@
 
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
   @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* ── Absolute Index Progress Panel ──────────────────────── */
+  .index-progress-bar { background:#21262d; border-radius:4px; height:10px; overflow:hidden; margin-bottom:4px; }
+  .index-progress-fill { height:100%; background:linear-gradient(90deg,#58a6ff,#3fb950); transition:width .3s ease; border-radius:4px; width:0%; }
+  .index-phase-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:14px; }
+  @media (max-width: 700px) { .index-phase-grid { grid-template-columns:repeat(2,1fr); } }
+  .index-phase-card { background:#0d1117; border:1px solid #30363d; border-radius:8px; padding:14px 10px; text-align:center; transition:all .3s ease; }
+  .index-phase-card.active { border-color:#58a6ff; box-shadow:0 0 16px rgba(88,166,255,.25); }
+  .index-phase-card.completed { border-color:#238636; background:#0d1117; }
+  .index-phase-card.error { border-color:#f85149; }
+  .index-phase-card .phase-icon { font-size:22px; margin-bottom:2px; }
+  .index-phase-card .phase-name { font-size:10px; color:#8b949e; text-transform:uppercase; letter-spacing:1px; margin-bottom:2px; }
+  .index-phase-card .phase-count { font-size:24px; font-weight:700; color:#e0e6f0; margin:4px 0 2px; font-family:'SF Mono','Fira Code',monospace; }
+  .index-phase-card .phase-label { font-size:10px; color:#8b949e; }
+  .index-phase-card.completed .phase-count { color:#3fb950; }
+  .index-phase-card.active .phase-count { color:#58a6ff; }
+  @keyframes indexSpin { to { transform:rotate(360deg); } }
+  .index-spinner { display:inline-block; animation:indexSpin .8s linear infinite; }
+  .index-summary { margin-top:14px; padding:12px; background:#161b22; border:1px solid #238636; border-radius:8px; color:#3fb950; font-size:13px; text-align:center; }
+  .index-summary .summary-title { font-weight:700; font-size:15px; margin-bottom:4px; }
 </style>
 </head>
 <body>
@@ -809,6 +829,7 @@
   <button class="nav-tab active" onclick="switchPage('dashboard', this)"><span class="nav-tab-icon">&#9776;</span> Dashboard</button>
   <button class="nav-tab" onclick="switchPage('chat', this)"><span class="nav-tab-icon">&#128172;</span> Chat</button>
   <button class="nav-tab" onclick="switchPage('evolution', this)"><span class="nav-tab-icon">&#129516;</span> Evolution</button>
+  <button class="nav-tab" onclick="switchPage('training', this)"><span class="nav-tab-icon">&#129504;</span> Training</button>
   <button class="nav-tab" onclick="switchPage('settings', this)"><span class="nav-tab-icon">&#9881;</span> Settings</button>
 </div>
 
@@ -869,6 +890,26 @@
     <button class="btn btn-blue" id="btnFocus" onclick="runFocus()">&#128269; Focus</button>
     <input type="text" class="module-input" id="moduleInput" placeholder="Module: platform/lang-api" value="platform/lang-api">
     <button class="btn" id="btnStatus" onclick="runStatus()">&#9881; Status</button>
+    <button class="btn btn-blue" id="btnAbsoluteIndex" onclick="runAbsoluteIndex()" style="margin-left:8px;">&#128218; Index</button>
+  </div>
+
+  <!-- Absolute Index Progress Panel -->
+  <div class="output-panel" id="indexProgressPanel" style="display:none;">
+    <div class="panel-header">
+      <span class="panel-title">&#128218; Absolute Index</span>
+      <span id="indexTimer" style="color:#8b949e;font-size:12px;font-family:'SF Mono',monospace;">00:00</span>
+    </div>
+    <div class="panel-body" style="padding:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span id="indexPhaseLabel" style="color:#58a6ff;font-size:12px;font-weight:600;">Preparing...</span>
+        <span id="indexPercent" style="color:#3fb950;font-size:13px;font-weight:700;">0%</span>
+      </div>
+      <div class="index-progress-bar">
+        <div class="index-progress-fill" id="indexProgressFill"></div>
+      </div>
+      <div class="index-phase-grid" id="indexPhaseGrid"></div>
+      <div class="index-summary" id="indexSummary" style="display:none;"></div>
+    </div>
   </div>
 
   <div class="query-area">
@@ -1010,9 +1051,152 @@
 </div>
 </div>
 
+<!-- ==================== TRAINING PANEL ==================== -->
+<div class="tab-page" id="page-training">
+<div class="main">
+
+  <h2 style="color:#f0f6fc;font-size:18px;margin-bottom:16px;">🧠 Training Panel — Model Improvement System</h2>
+
+  <!-- ── Section 1: Model Roles Overview ── -->
+  <div style="margin-bottom:24px;">
+    <h3 style="color:#58a6ff;font-size:15px;margin-bottom:12px;">Model Roles</h3>
+    <div id="trainingRolesGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
+    </div>
+  </div>
+
+  <!-- ── Section 2: Dataset Management ── -->
+  <div style="margin-bottom:24px;">
+    <h3 style="color:#58a6ff;font-size:15px;margin-bottom:12px;">Dataset Management</h3>
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;">
+      <button class="btn btn-primary btn-sm" onclick="loadTrainingDataForPanel()">Refresh Data</button>
+      <button class="btn btn-sm" style="background:#238636;color:#fff;" onclick="buildDatasetFromPanel()">📦 Build Dataset</button>
+      <input type="text" id="tpDatasetVersion" placeholder="v1" value="v1" style="width:60px;padding:4px 8px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;">
+      <input type="number" id="tpMinQuality" placeholder="0.6" value="0.6" step="0.1" min="0" max="1" style="width:60px;padding:4px 8px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;">
+      <span id="tpDatasetMsg" style="font-size:12px;color:#8b949e;"></span>
+    </div>
+    <div style="max-height:300px;overflow-y:auto;border:1px solid #21262d;border-radius:6px;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead style="background:#161b22;position:sticky;top:0;">
+          <tr>
+            <th style="padding:8px;text-align:left;color:#8b949e;border-bottom:1px solid #21262d;">ID</th>
+            <th style="padding:8px;text-align:left;color:#8b949e;border-bottom:1px solid #21262d;">Input</th>
+            <th style="padding:8px;text-align:left;color:#8b949e;border-bottom:1px solid #21262d;">Type</th>
+            <th style="padding:8px;text-align:left;color:#8b949e;border-bottom:1px solid #21262d;">Quality</th>
+            <th style="padding:8px;text-align:left;color:#8b949e;border-bottom:1px solid #21262d;">Rate</th>
+          </tr>
+        </thead>
+        <tbody id="tpDataBody">
+          <tr><td colspan="5" style="padding:16px;color:#484f58;text-align:center;">Click "Refresh Data" to load training examples</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Section 3: Training Jobs ── -->
+  <div style="margin-bottom:24px;">
+    <h3 style="color:#58a6ff;font-size:15px;margin-bottom:12px;">Training Jobs</h3>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+      <select id="tpTrainRole" style="padding:6px 10px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;">
+        <option value="classify">Classify (qwen3:1.7b)</option>
+        <option value="reason">Reason (deepseek-r1:8b)</option>
+        <option value="code">Code (qwen2.5-coder:14b)</option>
+        <option value="summarize">Summarize (qwen2.5:14b)</option>
+        <option value="vision">Vision (qwen2.5vl:7b)</option>
+      </select>
+      <select id="tpTrainMethod" style="padding:6px 10px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;">
+        <option value="lora">LoRA</option>
+        <option value="qlora">QLoRA</option>
+      </select>
+      <button class="btn btn-sm" style="background:#8957e5;color:#fff;" onclick="launchTrainingJob()">🚀 Launch Training</button>
+      <span id="tpTrainMsg" style="font-size:12px;color:#8b949e;"></span>
+    </div>
+    <div id="tpJobsList" style="font-size:12px;color:#484f58;padding:12px;background:#0d1117;border:1px solid #21262d;border-radius:6px;">
+      No training jobs yet. Training requires <code>unsloth</code> Python environment.
+    </div>
+  </div>
+
+  <!-- ── Section 4: Evaluation Center ── -->
+  <div style="margin-bottom:24px;">
+    <h3 style="color:#58a6ff;font-size:15px;margin-bottom:12px;">Evaluation Center</h3>
+    <div style="display:flex;gap:12px;margin-bottom:12px;">
+      <button class="btn btn-sm" style="background:#1f6feb;color:#fff;" onclick="runEvaluation()">📊 Run Evaluation</button>
+      <span id="tpEvalMsg" style="font-size:12px;color:#8b949e;"></span>
+    </div>
+    <div id="tpEvalResults" style="font-size:12px;color:#484f58;padding:12px;background:#0d1117;border:1px solid #21262d;border-radius:6px;">
+      No evaluations run yet. Select a candidate model and run evaluation to compare against production.
+    </div>
+  </div>
+
+  <!-- ── Section 5: Model Registry & Replacement ── -->
+  <div style="margin-bottom:24px;">
+    <h3 style="color:#58a6ff;font-size:15px;margin-bottom:12px;">Model Registry & Replacement</h3>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+      <input type="text" id="tpRegName" placeholder="Model name" style="padding:6px 10px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;width:140px;">
+      <input type="text" id="tpRegBase" placeholder="Base model" style="padding:6px 10px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;width:140px;">
+      <input type="text" id="tpRegVersion" placeholder="v1.0" style="padding:6px 10px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;width:80px;">
+      <button class="btn btn-sm" style="background:#238636;color:#fff;" onclick="registerModel()">Register</button>
+      <button class="btn btn-sm" style="background:#da3633;color:#fff;" onclick="rollbackModel()">⏪ Rollback</button>
+    </div>
+    <div id="tpModelRegistry" style="font-size:12px;color:#484f58;padding:12px;background:#0d1117;border:1px solid #21262d;border-radius:6px;">
+      Loading model registry...
+    </div>
+  </div>
+
+  <!-- ── Section 6: Diagnostics ── -->
+  <div style="margin-bottom:24px;">
+    <h3 style="color:#58a6ff;font-size:15px;margin-bottom:12px;">Diagnostics & Status</h3>
+    <div id="tpDiagnostics" style="font-size:12px;color:#c9d1d9;padding:12px;background:#0d1117;border:1px solid #21262d;border-radius:6px;">
+      Loading diagnostics...
+    </div>
+  </div>
+
+</div>
+</div>
+
 <!-- ==================== SETTINGS PAGE ==================== -->
 <div class="tab-page" id="page-settings">
 <div class="main">
+
+  <!-- ── Agent Orchestration ── -->
+  <h2 style="color:#f0f6fc;font-size:18px;margin-bottom:16px;">Agent Orchestration</h2>
+
+  <div id="agentStatusContent" style="margin-bottom:24px;">
+    <!-- Memory bar -->
+    <div class="settings-section" style="margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <strong style="color:#c9d1d9;">System Memory</strong>
+        <span id="memoryText" style="color:#8b949e;font-size:12px;">Loading...</span>
+      </div>
+      <div style="background:#21262d;border-radius:4px;height:20px;overflow:hidden;">
+        <div id="memoryBar" style="height:100%;background:linear-gradient(90deg,#238636,#f0883e);width:0%;transition:width 0.3s;border-radius:4px;"></div>
+      </div>
+    </div>
+
+    <!-- Agent cards -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px;">
+      <div class="settings-section" id="agent1Card">
+        <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:1px;">Agent 1 &middot; Classifier</div>
+        <div style="color:#58a6ff;font-size:14px;margin:4px 0;" id="agent1Model">qwen3:1.7b</div>
+        <div id="agent1Status" style="font-size:12px;color:#8b949e;">&#9679; checking...</div>
+      </div>
+      <div class="settings-section" id="agent2Card">
+        <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:1px;">Agent 2 &middot; Reasoner</div>
+        <div style="color:#58a6ff;font-size:14px;margin:4px 0;" id="agent2Model">deepseek-r1:8b</div>
+        <div id="agent2Status" style="font-size:12px;color:#8b949e;">&#9679; checking...</div>
+      </div>
+      <div class="settings-section" id="agent3Card">
+        <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:1px;">Agent 3 &middot; Specialist</div>
+        <div style="color:#58a6ff;font-size:14px;margin:4px 0;" id="agent3Model">(idle)</div>
+        <div id="agent3Status" style="font-size:12px;color:#8b949e;">&#9679; on-demand</div>
+      </div>
+    </div>
+
+    <!-- Loaded models table -->
+    <div class="settings-section">
+      <strong style="color:#c9d1d9;">Loaded Models</strong>
+      <div id="loadedModelsTable" style="margin-top:8px;font-size:13px;color:#8b949e;">Loading...</div>
+    </div>
+  </div>
 
   <h2 style="color:#f0f6fc;font-size:18px;margin-bottom:16px;">Configuration</h2>
   <div id="settingsContent">
@@ -1036,6 +1220,7 @@ function switchPage(pageId, btn) {
   document.getElementById('page-' + pageId).classList.add('active');
   // Load data for specific pages
   if (pageId === 'evolution') loadEvolutionData();
+  if (pageId === 'training') loadTrainingPanel();
   if (pageId === 'settings') loadSettings();
 }
 
@@ -1795,7 +1980,76 @@ let _availableModels = [];
 let _modelOverrides = {};
 let _modelDefaults = {};
 
+// ===== Agent Orchestration =====
+async function loadAgentStatus() {
+  try {
+    const [agentStatus, memStatus] = await Promise.all([
+      fetchJSON('/api/agents/status'),
+      fetchJSON('/api/models/memory')
+    ]);
+
+    // Memory bar
+    const usedPct = memStatus.totalGb > 0 ? ((memStatus.usedByModelsGb / memStatus.totalGb) * 100) : 0;
+    document.getElementById('memoryBar').style.width = usedPct + '%';
+    const barColor = usedPct > 80 ? '#da3633' : usedPct > 60 ? '#f0883e' : '#238636';
+    document.getElementById('memoryBar').style.background = barColor;
+    document.getElementById('memoryText').textContent =
+      `${memStatus.usedByModelsGb.toFixed(1)} GB / ${memStatus.totalGb.toFixed(0)} GB used (${memStatus.availableGb.toFixed(1)} GB free)`;
+
+    // Agent cards
+    if (agentStatus.agents && agentStatus.agents.length >= 3) {
+      const a1 = agentStatus.agents[0], a2 = agentStatus.agents[1], a3 = agentStatus.agents[2];
+      document.getElementById('agent1Model').textContent = a1.model;
+      document.getElementById('agent1Status').innerHTML = a1.isLoaded
+        ? '<span style="color:#238636">&#9679;</span> loaded' : '<span style="color:#f0883e">&#9679;</span> not loaded';
+      document.getElementById('agent2Model').textContent = a2.model;
+      document.getElementById('agent2Status').innerHTML = a2.isLoaded
+        ? '<span style="color:#238636">&#9679;</span> loaded' : '<span style="color:#f0883e">&#9679;</span> not loaded';
+      document.getElementById('agent3Model').textContent = a3.model;
+      document.getElementById('agent3Status').innerHTML = a3.isLoaded
+        ? '<span style="color:#238636">&#9679;</span> active' : '<span style="color:#8b949e">&#9679;</span> ' + (a3.role === 'IDLE' ? 'idle' : 'on-demand');
+    }
+
+    // Loaded models table
+    const models = agentStatus.loadedModels || [];
+    if (models.length === 0) {
+      document.getElementById('loadedModelsTable').innerHTML = '<span style="color:#484f58">No models currently loaded</span>';
+    } else {
+      let html = '<table style="width:100%;border-collapse:collapse;">';
+      html += '<tr style="color:#8b949e;font-size:11px;text-transform:uppercase;"><td>Model</td><td>Size</td><td>Expires</td><td></td></tr>';
+      for (const m of models) {
+        const expires = m.expiresAt ? new Date(m.expiresAt).toLocaleTimeString() : '-';
+        html += `<tr style="border-top:1px solid #21262d;">
+          <td style="color:#c9d1d9;padding:6px 0;">${m.name}</td>
+          <td style="color:#8b949e;">${m.sizeGb.toFixed(1)} GB</td>
+          <td style="color:#8b949e;">${expires}</td>
+          <td><button onclick="unloadModel('${m.name}')" style="background:#21262d;color:#f85149;border:1px solid #30363d;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;">Unload</button></td>
+        </tr>`;
+      }
+      html += '</table>';
+      document.getElementById('loadedModelsTable').innerHTML = html;
+    }
+  } catch(e) {
+    document.getElementById('memoryText').textContent = 'Agent status unavailable';
+  }
+}
+
+async function preloadModel(name) {
+  try {
+    await fetch('/api/models/preload', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({model:name}) });
+    loadAgentStatus();
+  } catch(e) { console.error('Preload failed:', e); }
+}
+
+async function unloadModel(name) {
+  try {
+    await fetch('/api/models/unload', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({model:name}) });
+    loadAgentStatus();
+  } catch(e) { console.error('Unload failed:', e); }
+}
+
 async function loadSettings() {
+  loadAgentStatus(); // Also load agent status when settings tab opens
   try {
     const [cfg, models, overridesData] = await Promise.all([
       fetchJSON('/api/config'),
@@ -1839,9 +2093,6 @@ async function loadSettings() {
         ['Collect Training Data', cfg.evolution_collect_data ? 'Yes' : 'No'],
         ['Quality Threshold', cfg.evolution_quality_threshold],
         ['Product Model', cfg.evolution_product_model || '(none)']
-      ],
-      'IntelliJ': [
-        ['Enabled', cfg.intellij_enabled ? 'Yes' : 'No']
       ]
     };
 
@@ -1944,6 +2195,354 @@ async function checkOllamaStatus() {
     badge.className = 'status-badge status-err';
     badge.style.fontSize = '10px';
     badge.innerHTML = '<span class="status-dot"></span>Ollama';
+  }
+}
+
+// ===== Absolute Index =====
+const INDEX_PHASES = [
+  { id:'SCAN', name:'Scan', label:'files', icon:'\uD83D\uDCC2' },
+  { id:'CLASSIFICATION', name:'Classify', label:'files', icon:'\uD83C\uDFF7\uFE0F' },
+  { id:'ENTITY_EXTRACTION', name:'Entities', label:'entities', icon:'\uD83E\uDDE9' },
+  { id:'RELATIONSHIPS', name:'Relations', label:'edges', icon:'\uD83D\uDD17' },
+  { id:'LINE_INDEX', name:'Lines', label:'lines', icon:'\uD83D\uDCCF' },
+  { id:'DEPENDENCY_GRAPH', name:'Deps', label:'deps', icon:'\uD83C\uDF10' }
+];
+let _indexTimerInterval = null;
+let _indexStartTime = 0;
+
+function renderIndexPhaseCards() {
+  const grid = document.getElementById('indexPhaseGrid');
+  grid.innerHTML = INDEX_PHASES.map(p =>
+    `<div class="index-phase-card pending" id="ixCard_${p.id}">
+      <div class="phase-icon" id="ixIcon_${p.id}">\u25CB</div>
+      <div class="phase-name">${escHtml(p.name)}</div>
+      <div class="phase-count" id="ixCount_${p.id}">\u2014</div>
+      <div class="phase-label">${escHtml(p.label)}</div>
+    </div>`
+  ).join('');
+}
+
+function startIndexTimer() {
+  _indexStartTime = Date.now();
+  const el = document.getElementById('indexTimer');
+  _indexTimerInterval = setInterval(() => {
+    const sec = Math.floor((Date.now() - _indexStartTime) / 1000);
+    const m = String(Math.floor(sec / 60)).padStart(2, '0');
+    const s = String(sec % 60).padStart(2, '0');
+    el.textContent = m + ':' + s;
+  }, 500);
+}
+
+function stopIndexTimer() {
+  if (_indexTimerInterval) { clearInterval(_indexTimerInterval); _indexTimerInterval = null; }
+}
+
+function handleIndexEvent(evt) {
+  const phase = evt.stageName;
+  const detail = evt.detail || '';
+
+  if (evt.type === 'index_completed') {
+    // Mark all phases done
+    INDEX_PHASES.forEach(p => {
+      const card = document.getElementById('ixCard_' + p.id);
+      if (card) { card.className = 'index-phase-card completed'; }
+      const icon = document.getElementById('ixIcon_' + p.id);
+      if (icon) icon.textContent = '\u2705';
+    });
+    document.getElementById('indexProgressFill').style.width = '100%';
+    document.getElementById('indexPercent').textContent = '100%';
+    document.getElementById('indexPhaseLabel').textContent = 'Complete!';
+    document.getElementById('indexPhaseLabel').style.color = '#3fb950';
+    const summary = document.getElementById('indexSummary');
+    summary.style.display = 'block';
+    summary.innerHTML = '<div class="summary-title">\u2705 Absolute Index Ready</div>' + escHtml(detail);
+    stopIndexTimer();
+    setReady();
+    loadStats();
+    return;
+  }
+
+  if (evt.type === 'error') {
+    document.getElementById('indexPhaseLabel').textContent = 'Error: ' + (evt.errorMessage || 'Unknown');
+    document.getElementById('indexPhaseLabel').style.color = '#f85149';
+    stopIndexTimer();
+    setReady();
+    return;
+  }
+
+  // index_progress event
+  if (!phase || phase === 'WORKSPACE' || phase === 'COMPLETE' || phase === 'RESOLUTION') return;
+
+  // Find phase index
+  const phaseIdx = INDEX_PHASES.findIndex(p => p.id === phase);
+  if (phaseIdx < 0) return;
+
+  // Mark previous phases as completed
+  for (let i = 0; i < phaseIdx; i++) {
+    const p = INDEX_PHASES[i];
+    const card = document.getElementById('ixCard_' + p.id);
+    if (card && !card.classList.contains('completed')) {
+      card.className = 'index-phase-card completed';
+      document.getElementById('ixIcon_' + p.id).textContent = '\u2705';
+    }
+  }
+
+  // Mark current phase as active
+  const card = document.getElementById('ixCard_' + phase);
+  if (card) card.className = 'index-phase-card active';
+  const icon = document.getElementById('ixIcon_' + phase);
+  if (icon) icon.innerHTML = '<span class="index-spinner">\u21BB</span>';
+
+  // Extract number from detail
+  const nums = detail.match(/(\d[\d,]*)/g);
+  if (nums && nums.length > 0) {
+    const lastNum = nums[nums.length - 1].replace(/,/g, '');
+    document.getElementById('ixCount_' + phase).textContent = Number(lastNum).toLocaleString();
+  }
+
+  // Update progress bar and label
+  const pct = Math.round(((phaseIdx + 0.5) / INDEX_PHASES.length) * 100);
+  document.getElementById('indexProgressFill').style.width = pct + '%';
+  document.getElementById('indexPercent').textContent = pct + '%';
+  document.getElementById('indexPhaseLabel').textContent = INDEX_PHASES[phaseIdx].name + ': ' + detail.substring(0, 60);
+  document.getElementById('indexPhaseLabel').style.color = '#58a6ff';
+}
+
+async function runAbsoluteIndex() {
+  // Show panel, hide others
+  document.getElementById('indexProgressPanel').style.display = 'block';
+  document.getElementById('indexSummary').style.display = 'none';
+  document.getElementById('indexProgressFill').style.width = '0%';
+  document.getElementById('indexPercent').textContent = '0%';
+  document.getElementById('indexPhaseLabel').textContent = 'Starting...';
+  document.getElementById('indexPhaseLabel').style.color = '#58a6ff';
+  renderIndexPhaseCards();
+  setRunning('Indexing...');
+  startIndexTimer();
+
+  try {
+    const resp = await fetch('/api/index/absolute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: resp.statusText }));
+      throw new Error(err.error || err.message || resp.statusText);
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+      for (const part of parts) {
+        const trimmed = part.trim();
+        if (!trimmed.startsWith('data: ')) continue;
+        try {
+          const evt = JSON.parse(trimmed.slice(6));
+          handleIndexEvent(evt);
+        } catch (_) {}
+      }
+    }
+    // Process remaining buffer
+    if (buffer.trim().startsWith('data: ')) {
+      try {
+        const evt = JSON.parse(buffer.trim().slice(6));
+        handleIndexEvent(evt);
+      } catch (_) {}
+    }
+  } catch (e) {
+    document.getElementById('indexPhaseLabel').textContent = 'Error: ' + e.message;
+    document.getElementById('indexPhaseLabel').style.color = '#f85149';
+    stopIndexTimer();
+    setReady();
+  }
+}
+
+// ===== Training Panel =====
+const ROLE_MODELS = [
+  { role: 'CLASSIFY', model: 'qwen3:1.7b', method: 'LoRA / QLoRA', trainable: true, icon: '🏷️' },
+  { role: 'REASON', model: 'deepseek-r1:8b', method: 'LoRA / QLoRA', trainable: true, icon: '🧠' },
+  { role: 'CODE', model: 'qwen2.5-coder:14b', method: 'LoRA / QLoRA', trainable: true, icon: '💻' },
+  { role: 'EMBED', model: 'qwen3-embedding:0.6b', method: 'Data / Retrieval', trainable: false, icon: '🔍' },
+  { role: 'SUMMARIZE', model: 'qwen2.5:14b', method: 'LoRA / QLoRA', trainable: true, icon: '📝' },
+  { role: 'VISION', model: 'qwen2.5vl:7b', method: 'LoRA / QLoRA', trainable: true, icon: '👁️' },
+];
+
+async function loadTrainingPanel() {
+  renderRoleCards();
+  loadTrainingDiagnostics();
+  loadModelRegistryForPanel();
+}
+
+function renderRoleCards() {
+  const grid = document.getElementById('trainingRolesGrid');
+  grid.innerHTML = ROLE_MODELS.map(r => `
+    <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:14px;font-weight:600;color:#f0f6fc;">${r.icon} ${r.role}</span>
+        <span style="font-size:10px;padding:2px 8px;border-radius:10px;${r.trainable
+          ? 'background:#1f6feb22;color:#58a6ff;border:1px solid #1f6feb44;'
+          : 'background:#23863622;color:#3fb950;border:1px solid #23863644;'
+        }">${r.method}</span>
+      </div>
+      <div style="font-size:12px;color:#8b949e;">Production: <span style="color:#c9d1d9;">${r.model}</span></div>
+      <div style="font-size:11px;color:#484f58;margin-top:4px;">Candidate: <span style="color:#8b949e;">None</span></div>
+      <div style="font-size:11px;color:#484f58;margin-top:2px;">Status: <span style="color:#3fb950;">● Active</span></div>
+      ${!r.trainable ? '<div style="font-size:10px;color:#d29922;margin-top:6px;">⚡ Prefer retrieval/data optimization over weight training</div>' : ''}
+    </div>
+  `).join('');
+}
+
+async function loadTrainingDataForPanel() {
+  try {
+    const data = await fetchJSON('/api/evolution/training-data?page=0&pageSize=50');
+    const tbody = document.getElementById('tpDataBody');
+    if (!data.items || data.items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:16px;color:#484f58;text-align:center;">No training data collected yet. Use Chat to generate examples.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.items.map(item => `
+      <tr style="border-bottom:1px solid #21262d;">
+        <td style="padding:6px 8px;color:#8b949e;">${item.id}</td>
+        <td style="padding:6px 8px;color:#c9d1d9;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml((item.input||'').substring(0,80))}</td>
+        <td style="padding:6px 8px;color:#8b949e;">${item.taskType||'?'}</td>
+        <td style="padding:6px 8px;"><span style="color:${item.qualityScore >= 0.7 ? '#3fb950' : item.qualityScore >= 0.4 ? '#d29922' : '#f85149'};">${(item.qualityScore||0).toFixed(2)}</span></td>
+        <td style="padding:6px 8px;">
+          <button onclick="rateTrainingItem(${item.id}, 1)" style="cursor:pointer;background:none;border:none;font-size:14px;" title="Bad">👎</button>
+          <button onclick="rateTrainingItem(${item.id}, 2)" style="cursor:pointer;background:none;border:none;font-size:14px;" title="OK">👌</button>
+          <button onclick="rateTrainingItem(${item.id}, 3)" style="cursor:pointer;background:none;border:none;font-size:14px;" title="Good">👍</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    document.getElementById('tpDataBody').innerHTML = `<tr><td colspan="5" style="padding:16px;color:#f85149;">${e.message}</td></tr>`;
+  }
+}
+
+async function rateTrainingItem(id, rating) {
+  await fetchJSON('/api/evolution/rate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id, rating}) });
+  loadTrainingDataForPanel();
+}
+
+async function buildDatasetFromPanel() {
+  const ver = document.getElementById('tpDatasetVersion').value || 'v1';
+  const minQ = parseFloat(document.getElementById('tpMinQuality').value) || 0.6;
+  try {
+    const res = await fetchJSON('/api/evolution/build-dataset', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({minQuality: minQ, version: ver}) });
+    document.getElementById('tpDatasetMsg').textContent = res.path ? `✅ Exported to ${res.path} (${res.count} examples)` : '⚠️ ' + (res.error || 'Unknown error');
+  } catch(e) { document.getElementById('tpDatasetMsg').textContent = '❌ ' + e.message; }
+}
+
+function launchTrainingJob() {
+  const role = document.getElementById('tpTrainRole').value;
+  const method = document.getElementById('tpTrainMethod').value;
+  document.getElementById('tpTrainMsg').innerHTML = `⚠️ Training ${role} with ${method} requires Python/unsloth. <br>Run: <code>unsloth train --model ${ROLE_MODELS.find(r=>r.role.toLowerCase()===role)?.model} --method ${method} --dataset ~/.forge/models/exports/latest/</code>`;
+}
+
+async function runEvaluation() {
+  document.getElementById('tpEvalMsg').textContent = '⏳ Evaluation requires candidate model. Register a model first, then run evaluation.';
+}
+
+async function registerModel() {
+  const name = document.getElementById('tpRegName').value;
+  const base = document.getElementById('tpRegBase').value;
+  const ver = document.getElementById('tpRegVersion').value;
+  if (!name || !base) { alert('Name and base model required'); return; }
+  try {
+    const res = await fetchJSON('/api/evolution/register', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, baseModel: base, version: ver}) });
+    alert(res.message || 'Registered');
+    loadModelRegistryForPanel();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function rollbackModel() {
+  if (!confirm('Rollback to previous model version?')) return;
+  try {
+    const res = await fetchJSON('/api/evolution/rollback', { method:'POST' });
+    alert(res.message || 'Rolled back');
+    loadModelRegistryForPanel();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function loadModelRegistryForPanel() {
+  try {
+    const models = await fetchJSON('/api/evolution/models');
+    const el = document.getElementById('tpModelRegistry');
+    if (!models || models.length === 0) {
+      el.innerHTML = '<span style="color:#484f58;">No registered models. Use "Register" to add a candidate model.</span>';
+      return;
+    }
+    el.innerHTML = models.map(m => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #21262d;">
+        <div>
+          <span style="color:#c9d1d9;font-weight:500;">${escHtml(m.name)}</span>
+          <span style="color:#484f58;margin-left:8px;">base: ${escHtml(m.baseModel)}</span>
+          <span style="color:#484f58;margin-left:8px;">v${escHtml(m.version)}</span>
+        </div>
+        <div>
+          <span style="padding:2px 8px;border-radius:10px;font-size:10px;${m.status === 'active'
+            ? 'background:#23863622;color:#3fb950;'
+            : 'background:#21262d;color:#8b949e;'
+          }">${m.status}</span>
+          ${m.status !== 'active' ? `<button onclick="activateModelFromPanel('${escHtml(m.name)}')" style="margin-left:8px;cursor:pointer;background:#1f6feb;color:#fff;border:none;padding:2px 8px;border-radius:4px;font-size:11px;">Activate</button>` : ''}
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+    document.getElementById('tpModelRegistry').innerHTML = `<span style="color:#f85149;">${e.message}</span>`;
+  }
+}
+
+async function activateModelFromPanel(name) {
+  if (!confirm(`Activate model "${name}" as production? This will replace the current active model.`)) return;
+  try {
+    const res = await fetchJSON('/api/evolution/activate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name}) });
+    alert(res.message || 'Activated');
+    loadModelRegistryForPanel();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function loadTrainingDiagnostics() {
+  try {
+    const status = await fetchJSON('/api/evolution/status');
+    const el = document.getElementById('tpDiagnostics');
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <div style="color:#8b949e;font-size:11px;">Readiness Level</div>
+          <div style="color:#58a6ff;font-size:16px;font-weight:600;">${status.readinessLevel || 'UNKNOWN'}</div>
+        </div>
+        <div>
+          <div style="color:#8b949e;font-size:11px;">Total Examples</div>
+          <div style="color:#c9d1d9;font-size:16px;">${status.totalExamples || 0}</div>
+        </div>
+        <div>
+          <div style="color:#8b949e;font-size:11px;">Validated Examples</div>
+          <div style="color:#c9d1d9;font-size:16px;">${status.validatedExamples || 0}</div>
+        </div>
+        <div>
+          <div style="color:#8b949e;font-size:11px;">Avg Quality Score</div>
+          <div style="color:#c9d1d9;font-size:16px;">${(status.averageQuality || 0).toFixed(3)}</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;color:#8b949e;font-size:11px;">
+        <strong>Milestones:</strong>
+        ${(status.milestones || []).map(m => `<span style="margin-right:12px;">${m.reached ? '✅' : '⬜'} ${m.name} (${m.current}/${m.target})</span>`).join('')}
+      </div>
+      <div style="margin-top:8px;color:#8b949e;font-size:11px;">
+        <strong>Recommendation:</strong> ${status.recommendation || 'Collect more training data through Chat interactions.'}
+      </div>
+    `;
+  } catch(e) {
+    document.getElementById('tpDiagnostics').innerHTML = `<span style="color:#f85149;">${e.message}</span>`;
   }
 }
 

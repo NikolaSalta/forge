@@ -432,7 +432,7 @@ class Orchestrator(
             }
             "MODULE_DISCOVERY" -> {
                 val moduleCount = try { ctx.db.getModuleCount() } catch (_: Exception) { 0 }
-                if (moduleCount > 0) "Found $moduleCount modules" else "No modules (IntelliJ mode disabled)"
+                if (moduleCount > 0) "Found $moduleCount modules" else "No modules discovered"
             }
             else -> defaultDetail
         }

@@ -36,7 +36,8 @@ fun Routing.apiRoutes(
     ollamaClient: OllamaClient,
     workspaceManager: WorkspaceManager,
     modelSelector: ModelSelector,
-    orchestrator: Orchestrator
+    orchestrator: Orchestrator,
+    agentOrchestrator: forge.llm.AgentOrchestrator? = null
 ) {
     route("/api") {
 
@@ -254,6 +255,81 @@ fun Routing.apiRoutes(
             call.respond(models)
         }
 
+        // ── Agent Orchestration ──────────────────────────────────────────
+
+        get("/agents/status") {
+            val jsonStr = withContext(Dispatchers.IO) {
+                if (agentOrchestrator != null) {
+                    val s = agentOrchestrator.getStatus()
+                    val agents = s.agents.joinToString(",") { a ->
+                        """{"name":"${a.name}","model":"${a.model}","role":"${a.role}","isHot":${a.isHot},"isLoaded":${a.isLoaded}}"""
+                    }
+                    val models = s.loadedModels.joinToString(",") { m ->
+                        """{"name":"${m.name}","sizeGb":${m.sizeGb},"expiresAt":"${m.expiresAt}"}"""
+                    }
+                    """{"enabled":${s.enabled},"agents":[$agents],"loadedModels":[$models],"totalMemoryGb":${s.totalMemoryGb},"usedMemoryGb":${s.usedMemoryGb},"availableMemoryGb":${s.availableMemoryGb},"canLoadMore":${s.canLoadMore}}"""
+                } else {
+                    """{"enabled":false,"agents":[],"loadedModels":[],"totalMemoryGb":0,"usedMemoryGb":0,"availableMemoryGb":0,"canLoadMore":false}"""
+                }
+            }
+            call.respondText(jsonStr, ContentType.Application.Json)
+        }
+
+        get("/models/loaded") {
+            val jsonStr = withContext(Dispatchers.IO) {
+                try {
+                    val models = ollamaClient.getLoadedModels()
+                    val items = models.joinToString(",") { m ->
+                        """{"name":"${m.name}","model":"${m.model}","sizeGb":${m.sizeGb},"expiresAt":"${m.expiresAt}"}"""
+                    }
+                    "[$items]"
+                } catch (_: Exception) { "[]" }
+            }
+            call.respondText(jsonStr, ContentType.Application.Json)
+        }
+
+        post("/models/preload") {
+            @kotlinx.serialization.Serializable
+            data class PreloadReq(val model: String)
+            val body = call.receive<PreloadReq>()
+            val ok = withContext(Dispatchers.IO) {
+                ollamaClient.preloadModel(body.model, config.agents.keepAliveMinutes)
+            }
+            if (ok) call.respond(SuccessResponse("Model '${body.model}' preloaded"))
+            else call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Failed to preload"))
+        }
+
+        post("/models/unload") {
+            @kotlinx.serialization.Serializable
+            data class UnloadReq(val model: String)
+            val body = call.receive<UnloadReq>()
+            val ok = withContext(Dispatchers.IO) { ollamaClient.unloadModel(body.model) }
+            if (ok) call.respond(SuccessResponse("Model '${body.model}' unloaded"))
+            else call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Failed to unload"))
+        }
+
+        get("/models/memory") {
+            val totalBytes = ollamaClient.getSystemMemoryBytes()
+            val loaded = withContext(Dispatchers.IO) {
+                try { ollamaClient.getLoadedModels() } catch (_: Exception) { emptyList() }
+            }
+            val usedGb = loaded.sumOf { it.sizeGb }
+            val totalGb = totalBytes / (1024.0 * 1024.0 * 1024.0)
+            val availGb = (totalGb - usedGb - 4.0).coerceAtLeast(0.0)
+            call.respondText(
+                """{"totalGb":$totalGb,"usedByModelsGb":$usedGb,"availableGb":$availGb,"thresholdGb":${config.agents.heavyModelThresholdGb},"loadedCount":${loaded.size}}""",
+                ContentType.Application.Json
+            )
+        }
+
+        get("/models/active") {
+            val active = withContext(Dispatchers.IO) { modelSelector.getActiveModels() }
+            val items = active.map { (role, info) ->
+                """{"role":"${role.name}","model":"${info.modelName}","isLoaded":${info.isLoaded},"isOverride":${info.isOverride}}"""
+            }.joinToString(",")
+            call.respondText("[$items]", ContentType.Application.Json)
+        }
+
         // ── Analyze ──────────────────────────────────────────────────────
 
         post("/analyze") {
@@ -416,10 +492,10 @@ fun Routing.apiRoutes(
         // ── Config ───────────────────────────────────────────────────────
 
         get("/config") {
-            // Return the current config as a simplified JSON representation
-            call.respond(mapOf(
+            // Return the current config as Map<String, String> to avoid mixed-type serialization issues
+            call.respond(mapOf<String, String>(
                 "ollama_host" to config.ollama.host,
-                "ollama_timeout" to config.ollama.timeoutSeconds,
+                "ollama_timeout" to config.ollama.timeoutSeconds.toString(),
                 "model_classify" to config.models.classify,
                 "model_reason" to config.models.reason,
                 "model_code" to config.models.code,
@@ -427,15 +503,14 @@ fun Routing.apiRoutes(
                 "model_summarize" to config.models.summarize,
                 "model_vision" to config.models.vision,
                 "workspace_base_dir" to config.workspace.baseDir,
-                "chunk_max_lines" to config.workspace.chunkMaxLines,
-                "max_context_chunks" to config.retrieval.maxContextChunks,
-                "similarity_threshold" to config.retrieval.similarityThreshold,
-                "decomposition_enabled" to config.decomposition.enabled,
-                "max_partitions" to config.decomposition.maxPartitions,
-                "intellij_enabled" to config.intellij.enabled,
-                "evolution_enabled" to config.evolution.enabled,
-                "evolution_collect_data" to config.evolution.collectTrainingData,
-                "evolution_quality_threshold" to config.evolution.qualityThreshold,
+                "chunk_max_lines" to config.workspace.chunkMaxLines.toString(),
+                "max_context_chunks" to config.retrieval.maxContextChunks.toString(),
+                "similarity_threshold" to config.retrieval.similarityThreshold.toString(),
+                "decomposition_enabled" to config.decomposition.enabled.toString(),
+                "max_partitions" to config.decomposition.maxPartitions.toString(),
+                "evolution_enabled" to config.evolution.enabled.toString(),
+                "evolution_collect_data" to config.evolution.collectTrainingData.toString(),
+                "evolution_quality_threshold" to config.evolution.qualityThreshold.toString(),
                 "evolution_product_model" to (config.evolution.productModel ?: "")
             ))
         }
@@ -815,11 +890,91 @@ fun Routing.apiRoutes(
                 }
                 CoroutineScope(Dispatchers.IO).launch {
                     val coordinator = ProjectIndexCoordinator(db, java.nio.file.Path.of(repoPath), config)
-                    coordinator.buildFullIndex { phase, detail ->
-                        println("[INDEX] $phase: $detail")
+                    coordinator.buildFullIndex { phase, detail, current, total ->
+                        println("[INDEX] $phase: $detail ($current/$total)")
                     }
                 }
                 call.respond(SuccessResponse("Index rebuild started"))
+            }
+
+            // ── Absolute Index with SSE streaming progress ──────────
+            post("/absolute") {
+                if (!Security.askLimiter.tryAcquire("index-absolute")) {
+                    call.respond(HttpStatusCode.TooManyRequests, ErrorResponse("Rate limit exceeded"))
+                    return@post
+                }
+
+                val body = try {
+                    call.receive<Map<String, String>>()
+                } catch (_: Exception) { emptyMap() }
+
+                val targetPath = body["repoPath"]?.takeIf { it.isNotBlank() } ?: webState.repoPath
+                if (targetPath.isNullOrBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("No repository path specified"))
+                    return@post
+                }
+
+                val resolvedPath = java.nio.file.Path.of(targetPath).toAbsolutePath().normalize()
+                if (!java.nio.file.Files.isDirectory(resolvedPath)) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("Path not found: $targetPath"))
+                    return@post
+                }
+
+                val traceChannel = Channel<TraceEvent>(Channel.BUFFERED)
+
+                val scope = CoroutineScope(Dispatchers.IO)
+                val startMs = System.currentTimeMillis()
+                val job = scope.launch {
+                    try {
+                        // Step 1: Create workspace + DB
+                        traceChannel.send(TraceEvent.indexProgress("WORKSPACE", "Creating workspace...", 0, 7))
+                        val workspace = workspaceManager.getOrCreate(resolvedPath)
+                        val db = workspace.db
+                        traceChannel.send(TraceEvent.indexProgress("WORKSPACE", "Workspace ready", 1, 7))
+
+                        // Step 2: Scan repository files
+                        traceChannel.send(TraceEvent.indexProgress("SCAN", "Scanning repository...", 1, 7))
+                        val scanner = forge.retrieval.RepoScanner(config.workspace)
+                        val scanResult = scanner.scan(resolvedPath, db)
+                        val totalFiles = scanResult.filesScanned.takeIf { it > 0 } ?: db.getFileCount()
+                        traceChannel.send(TraceEvent.indexProgress("SCAN", "Found $totalFiles files", totalFiles, totalFiles))
+
+                        // Step 3: Build full index with progress streaming
+                        val coordinator = ProjectIndexCoordinator(db, resolvedPath, config)
+                        coordinator.buildFullIndex { phase, detail, current, total ->
+                            traceChannel.trySend(TraceEvent.indexProgress(phase, detail, current, total))
+                        }
+
+                        // Step 4: Mark index as built so pipeline can find it
+                        db.setMeta("index_version", "1.0")
+                        db.setMeta("index_built_at", java.time.Instant.now().toString())
+
+                        // Step 5: Refresh webState to use this workspace
+                        webState.setRepoPath(resolvedPath.toString())
+
+                        // Done — send final stats
+                        val queryService = IndexQueryService(db)
+                        val stats = queryService.getIndexStats()
+                        val durationMs = System.currentTimeMillis() - startMs
+                        traceChannel.send(TraceEvent.indexCompleted(
+                            "Index ready: ${stats.totalEntities} entities, ${stats.totalRelationships} relationships, ${stats.totalLinesIndexed} lines indexed",
+                            durationMs
+                        ))
+                    } catch (e: Exception) {
+                        traceChannel.send(TraceEvent.error("INDEX", e.message ?: "Indexing failed"))
+                    } finally {
+                        traceChannel.close()
+                    }
+                }
+
+                // Stream events to client as SSE
+                call.respondTextWriter(contentType = ContentType.Text.EventStream) {
+                    for (event in traceChannel) {
+                        write(event.toSSE())
+                        flush()
+                    }
+                    job.join()
+                }
             }
         }
     }

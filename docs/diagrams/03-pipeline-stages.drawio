@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="draw.io">
+  <diagram name="9-Stage Pipeline Flow" id="pipe-003">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="FORGE 9-Stage Pipeline" style="text;html=1;fontSize=20;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="300" y="10" width="500" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Stage 1: SCAN -->
+        <mxCell id="s1" value="&lt;b&gt;1. SCAN&lt;/b&gt;&lt;br&gt;RepoScanner discovers&lt;br&gt;project files" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Stage 2: MODULE_DISCOVERY -->
+        <mxCell id="s2" value="&lt;b&gt;2. MODULE_DISCOVERY&lt;/b&gt;&lt;br&gt;Identify project modules&lt;br&gt;and boundaries" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="240" y="80" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Stage 3: CHUNK -->
+        <mxCell id="s3" value="&lt;b&gt;3. CHUNK&lt;/b&gt;&lt;br&gt;Split files into&lt;br&gt;semantic chunks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="440" y="80" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Decision: Index exists? -->
+        <mxCell id="d1" value="Index&lt;br&gt;exists?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="660" y="75" width="100" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Stage 4: PROJECT_INDEXING -->
+        <mxCell id="s4" value="&lt;b&gt;4. PROJECT_INDEXING&lt;/b&gt;&lt;br&gt;Extract entities,&lt;br&gt;relationships, deps" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="820" y="80" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Decision: Simple task? -->
+        <mxCell id="d2" value="Simple&lt;br&gt;task?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="80" y="240" width="100" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Stage 5: EMBED -->
+        <mxCell id="s5" value="&lt;b&gt;5. EMBED&lt;/b&gt;&lt;br&gt;Generate embeddings&lt;br&gt;for chunks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="240" y="240" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Stage 6: EVIDENCE -->
+        <mxCell id="s6" value="&lt;b&gt;6. EVIDENCE&lt;/b&gt;&lt;br&gt;EvidenceCollector&lt;br&gt;gathers relevant chunks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="440" y="240" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Stage 7: CONTEXT_ASSEMBLY -->
+        <mxCell id="s7" value="&lt;b&gt;7. CONTEXT_ASSEMBLY&lt;/b&gt;&lt;br&gt;Build prompt with&lt;br&gt;evidence + metadata" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="240" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Stage 8: LLM_CALL -->
+        <mxCell id="s8" value="&lt;b&gt;8. LLM_CALL&lt;/b&gt;&lt;br&gt;OllamaClient.chat()&lt;br&gt;with assembled context" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="350" y="400" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Stage 9: VALIDATE -->
+        <mxCell id="s9" value="&lt;b&gt;9. VALIDATE&lt;/b&gt;&lt;br&gt;Parse response,&lt;br&gt;quality check" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="600" y="400" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Output -->
+        <mxCell id="out" value="&lt;b&gt;Response&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="830" y="410" width="120" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Arrows -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;" edge="1" source="s1" target="s2" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;" edge="1" source="s2" target="s3" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;" edge="1" source="s3" target="d1" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- No: run indexing -->
+        <mxCell id="e4" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;fontStyle=2;fontSize=10;" edge="1" source="d1" target="s4" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Yes: skip indexing -->
+        <mxCell id="e5" value="Yes (skip)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;fontStyle=2;fontSize=10;dashed=1;" edge="1" source="d1" target="d2" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="710" y="190" />
+              <mxPoint x="130" y="190" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <!-- Indexing → decision -->
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;" edge="1" source="s4" target="d2" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="900" y="190" />
+              <mxPoint x="130" y="190" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <!-- Simple? No → EMBED -->
+        <mxCell id="e7" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;fontStyle=2;fontSize=10;" edge="1" source="d2" target="s5" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Simple? Yes → skip to EVIDENCE -->
+        <mxCell id="e8" value="Yes (skip)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;fontStyle=2;fontSize=10;dashed=1;" edge="1" source="d2" target="s6" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="130" y="350" />
+              <mxPoint x="520" y="350" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;" edge="1" source="s5" target="s6" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;" edge="1" source="s6" target="s7" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;" edge="1" source="s7" target="s8" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="720" y="370" />
+              <mxPoint x="430" y="370" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;" edge="1" source="s8" target="s9" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;" edge="1" source="s9" target="out" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

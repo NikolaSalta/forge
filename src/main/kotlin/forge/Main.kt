@@ -14,7 +14,7 @@ import com.github.ajalt.clikt.parameters.types.path
 import forge.core.Orchestrator
 import forge.core.StateManager
 import forge.files.FileProcessor
-import forge.intellij.IntelliJModuleResolver
+import forge.llm.AgentOrchestrator
 import forge.llm.ModelSelector
 import forge.llm.OllamaClient
 import forge.llm.PromptBuilder
@@ -68,13 +68,17 @@ private data class ForgeServices(
     val fileProcessor: FileProcessor,
     val stateManager: StateManager,
     val orchestrator: Orchestrator,
-    val console: ForgeConsole
+    val console: ForgeConsole,
+    val agentOrchestrator: AgentOrchestrator?
 )
 
 private fun buildServices(config: ForgeConfig): ForgeServices {
     val ollamaClient = OllamaClient(config)
     val workspaceManager = WorkspaceManager(config)
-    val modelSelector = ModelSelector(config, ollamaClient)
+    val agentOrchestrator = if (config.agents.enabled) {
+        AgentOrchestrator(config.agents, ollamaClient)
+    } else null
+    val modelSelector = ModelSelector(config, ollamaClient, agentOrchestrator)
     val promptBuilder = PromptBuilder()
     val fileProcessor = FileProcessor(ollamaClient, config.models.vision)
     val stateManager = StateManager()
@@ -100,7 +104,8 @@ private fun buildServices(config: ForgeConfig): ForgeServices {
         fileProcessor = fileProcessor,
         stateManager = stateManager,
         orchestrator = orchestrator,
-        console = console
+        console = console,
+        agentOrchestrator = agentOrchestrator
     )
 }
 
@@ -555,19 +560,16 @@ class VoiceSetupCommand : CliktCommand(name = "voice-setup") {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Lists detected IntelliJ modules for a repository.
+ * Lists discovered modules for a repository.
  *
  * Usage: forge modules <path>
  */
-class IntelliJModulesCommand : CliktCommand(name = "modules") {
+class ModulesCommand : CliktCommand(name = "modules") {
     override fun help(context: com.github.ajalt.clikt.core.Context): String =
-        "List detected IntelliJ modules."
+        "List discovered project modules."
 
     private val repoPath by argument("path", help = "Path to the repository")
         .path(mustExist = true)
-
-    private val filter by option("--filter", "-f", help = "Filter modules by name substring")
-    private val type by option("--type", "-t", help = "Filter modules by type (PLATFORM_API, PLATFORM_IMPL, PLUGIN, etc.)")
 
     override fun run() {
         val config = getConfig()
@@ -577,54 +579,19 @@ class IntelliJModulesCommand : CliktCommand(name = "modules") {
 
         var modules = workspace.db.getAllModules()
         if (modules.isEmpty()) {
-            // Discover modules first
-            val resolver = IntelliJModuleResolver(repoPath.toAbsolutePath().normalize())
+            val discovered = forge.retrieval.GenericModuleDiscovery.discover(repoPath.toAbsolutePath().normalize())
             val repoName = repoPath.fileName.toString()
             val repoId = workspace.db.insertRepo(repoName, repoPath.toAbsolutePath().toString(), null, null, true)
-            val discovered = resolver.discoverModules()
-            resolver.persistToDatabase(discovered, repoId, workspace.db)
+            for (mod in discovered) {
+                workspace.db.insertModule(repoId, mod.path, mod.name, null, mod.moduleType, "language:${mod.language}")
+            }
             modules = workspace.db.getAllModules()
         }
 
-        // Apply filters
-        var filtered = modules
-        filter?.let { f ->
-            filtered = filtered.filter { it.name.contains(f, ignoreCase = true) }
-        }
-        type?.let { t ->
-            filtered = filtered.filter { (it.moduleType ?: "").equals(t, ignoreCase = true) }
-        }
-
-        printModulesSummary(console, modules)
-        console.println("")
-        printModulesTable(console, filtered)
-    }
-
-    private fun printModulesSummary(console: ForgeConsole, modules: List<ModuleRecord>) {
-        val byType = modules.groupBy { it.moduleType ?: "unknown" }
-        console.info("IntelliJ Modules: ${modules.size} total")
-        for ((typeName, mods) in byType.entries.sortedByDescending { it.value.size }) {
-            console.println("  $typeName: ${mods.size}")
-        }
-    }
-
-    private fun printModulesTable(console: ForgeConsole, modules: List<ModuleRecord>) {
-        if (modules.isEmpty()) {
-            console.warn("No modules match the filter.")
-            return
-        }
-        console.println(String.format("%-50s %-15s %8s %s", "MODULE", "TYPE", "FILES", "DEPENDENCIES"))
-        console.println("-".repeat(110))
+        console.info("Modules: ${modules.size} total")
         for (module in modules) {
-            val deps = module.dependencies?.take(50) ?: ""
-            console.println(String.format("%-50s %-15s %8d %s",
-                module.name.take(49),
-                module.moduleType ?: "unknown",
-                module.fileCount,
-                deps))
+            console.println("  ${module.name} (${module.moduleType ?: "unknown"}) — ${module.fileCount} files")
         }
-        console.println("")
-        console.println("Showing ${modules.size} modules. Use --filter/-f or --type/-t to narrow results.")
     }
 }
 
@@ -669,23 +636,21 @@ class ConnectCommand : CliktCommand(name = "connect") {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Queries within a specific IntelliJ module.
+ * Queries within a specific project module.
  *
  * Usage: forge focus <module> <path> <question>
  */
 class FocusCommand : CliktCommand(name = "focus") {
     override fun help(context: com.github.ajalt.clikt.core.Context): String =
-        "Query within a specific IntelliJ module."
+        "Query within a specific project module."
 
-    private val moduleName by argument("module", help = "Name of the IntelliJ module")
+    private val moduleName by argument("module", help = "Name of the module")
     private val repoPath by argument("path", help = "Path to the repository")
         .path(mustExist = true)
     private val question by argument("question", help = "The question to ask")
 
     override fun run() {
-        val config = getConfig().let { c ->
-            c.copy(intellij = c.intellij.copy(enabled = true))
-        }
+        val config = getConfig()
         val services = buildServices(config)
 
         services.console.banner()
@@ -744,6 +709,7 @@ class ServeCommand : CliktCommand(name = "serve") {
             workspaceManager = services.workspaceManager,
             modelSelector = services.modelSelector,
             orchestrator = services.orchestrator,
+            agentOrchestrator = services.agentOrchestrator,
             port = portNum
         )
 
@@ -794,7 +760,7 @@ fun main(args: Array<String>) {
             StatusCommand(),
             ClearCommand(),
             VoiceSetupCommand(),
-            IntelliJModulesCommand(),
+            ModulesCommand(),
             ConnectCommand(),
             FocusCommand(),
             ServeCommand()

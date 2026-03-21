@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="draw.io">
+  <diagram name="Full Query Lifecycle" id="qlc-011">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="Full Query Lifecycle" style="text;html=1;fontSize=20;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="300" y="10" width="500" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- User Input -->
+        <mxCell id="user" value="&lt;b&gt;User Input&lt;/b&gt;&lt;br&gt;(Browser / CLI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="50" y="70" width="150" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- POST /api/ask/stream -->
+        <mxCell id="post" value="&lt;b&gt;POST /api/ask/stream&lt;/b&gt;&lt;br&gt;ForgeServer (Ktor)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="250" y="70" width="180" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- IntentResolver -->
+        <mxCell id="intent" value="&lt;b&gt;IntentResolver&lt;/b&gt;&lt;br&gt;CLASSIFY model&lt;br&gt;(Agent 1: qwen3:1.7b)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="480" y="65" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- TaskType -->
+        <mxCell id="tasktype" value="&lt;b&gt;TaskType&lt;/b&gt;&lt;br&gt;CODE_EXPLAIN | BUG_FIX&lt;br&gt;REFACTOR | SEARCH | ..." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="710" y="65" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Pipeline -->
+        <mxCell id="pipeline" value="&lt;b&gt;Pipeline Stages&lt;/b&gt;&lt;br&gt;SCAN → MODULE_DISCOVERY →&lt;br&gt;CHUNK → INDEX → EMBED →&lt;br&gt;EVIDENCE → CONTEXT_ASSEMBLY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="50" y="180" width="240" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ModelSelector -->
+        <mxCell id="selector" value="&lt;b&gt;ModelSelector&lt;/b&gt;&lt;br&gt;selectForRole(taskType)&lt;br&gt;→ picks best model" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="340" y="180" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- AgentOrchestrator -->
+        <mxCell id="orchestrator" value="&lt;b&gt;AgentOrchestrator&lt;/b&gt;&lt;br&gt;ensureAgentReady()&lt;br&gt;Memory check + swap" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="570" y="180" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- OllamaClient.chat() -->
+        <mxCell id="chat" value="&lt;b&gt;OllamaClient.chat()&lt;/b&gt;&lt;br&gt;POST /api/chat (stream)&lt;br&gt;Kotlin Flow&amp;lt;String&amp;gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="800" y="180" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Ollama -->
+        <mxCell id="ollama" value="&lt;b&gt;Ollama Server&lt;/b&gt;&lt;br&gt;Local LLM inference&lt;br&gt;NDJSON stream" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="800" y="310" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ResponseParser -->
+        <mxCell id="parser" value="&lt;b&gt;ResponseParser&lt;/b&gt;&lt;br&gt;Parse tokens, extract&lt;br&gt;structured data" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="550" y="310" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- SSE Stream -->
+        <mxCell id="sse" value="&lt;b&gt;SSE Stream&lt;/b&gt;&lt;br&gt;data: {token, done}&lt;br&gt;Event-by-event" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="300" y="310" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Browser -->
+        <mxCell id="browser" value="&lt;b&gt;Browser&lt;/b&gt;&lt;br&gt;EventSource renders&lt;br&gt;tokens in real-time" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="50" y="310" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Arrows -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" source="user" target="post" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" source="post" target="intent" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" source="intent" target="tasktype" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" source="tasktype" target="pipeline" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="800" y="150" />
+              <mxPoint x="170" y="150" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" source="pipeline" target="selector" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" source="selector" target="orchestrator" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" source="orchestrator" target="chat" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" source="chat" target="ollama" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;dashed=1;" edge="1" source="ollama" target="parser" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;dashed=1;" edge="1" source="parser" target="sse" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;dashed=1;" edge="1" source="sse" target="browser" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="leg_solid" value="— Request flow" style="text;html=1;fontSize=10;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="50" y="400" width="120" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_dashed" value="- - Response stream" style="text;html=1;fontSize=10;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="180" y="400" width="120" height="20" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -125,7 +125,7 @@ class OllamaClient(
     }
 
     private val httpClient: HttpClient = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofSeconds(10))
+        .connectTimeout(Duration.ofSeconds(30))
         .build()
 
     constructor(forgeConfig: ForgeConfig) : this(forgeConfig.ollama)
@@ -317,24 +317,151 @@ class OllamaClient(
 
     private fun <T> executeWithRetry(action: () -> T): T {
         var lastException: Exception? = null
-        for (attempt in 0..maxRetries) {
+        val effectiveRetries = maxOf(maxRetries, 2) // at least 2 retries
+        for (attempt in 0..effectiveRetries) {
             try {
                 return action()
             } catch (e: ConnectException) {
                 lastException = e
-                if (attempt < maxRetries) {
-                    Thread.sleep(500L * (attempt + 1))
+                if (attempt < effectiveRetries) {
+                    Thread.sleep(1000L * (attempt + 1))
+                }
+            } catch (e: java.net.http.HttpTimeoutException) {
+                // Timeout — retry (model cold start can take 30-60s)
+                lastException = e
+                if (attempt < effectiveRetries) {
+                    Thread.sleep(2000L * (attempt + 1))
+                }
+            } catch (e: java.io.IOException) {
+                // IO errors (broken pipe, connection reset) — retry
+                lastException = e
+                if (attempt < effectiveRetries) {
+                    Thread.sleep(1000L * (attempt + 1))
                 }
             } catch (e: Exception) {
-                // For non-connection errors, do not retry
                 throw OllamaException("Ollama request failed: ${e.message}", e)
             }
         }
         throw OllamaException(
-            "Failed to connect to Ollama at $baseUrl after ${maxRetries + 1} attempts: ${lastException?.message}",
+            "Failed to connect to Ollama at $baseUrl after ${effectiveRetries + 1} attempts: ${lastException?.message}",
             lastException
         )
     }
+
+    // ── Model lifecycle management ──────────────────────────────────────────────
+
+    /**
+     * Query Ollama for currently loaded (warm) models via /api/ps.
+     */
+    suspend fun getLoadedModels(): List<RunningModel> = withContext(Dispatchers.IO) {
+        try {
+            val responseText = getWithRetry("$baseUrl/api/ps")
+            val root = json.parseToJsonElement(responseText).jsonObject
+            val models = root["models"]?.jsonArray ?: return@withContext emptyList()
+            models.map { elem ->
+                val obj = elem.jsonObject
+                RunningModel(
+                    name = obj["name"]?.jsonPrimitive?.content ?: "",
+                    model = obj["model"]?.jsonPrimitive?.content ?: "",
+                    sizeBytes = obj["size"]?.jsonPrimitive?.content?.toLongOrNull() ?: 0L,
+                    sizeVram = obj["size_vram"]?.jsonPrimitive?.content?.toLongOrNull() ?: 0L,
+                    expiresAt = obj["expires_at"]?.jsonPrimitive?.content ?: ""
+                )
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Preload a model into Ollama memory.
+     * Tries /api/generate first (for chat/generate models),
+     * falls back to /api/embed (for embedding-only models like qwen3-embedding).
+     */
+    suspend fun preloadModel(modelName: String, keepAliveMinutes: Int = 10): Boolean = withContext(Dispatchers.IO) {
+        try {
+            // Try generate endpoint first (works for most models)
+            val genBody = """{"model":"$modelName","prompt":"","keep_alive":"${keepAliveMinutes}m"}"""
+            val genRequest = HttpRequest.newBuilder()
+                .uri(URI.create("$baseUrl/api/generate"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(genBody))
+                .timeout(Duration.ofSeconds(300))
+                .build()
+            val genResponse = httpClient.send(genRequest, HttpResponse.BodyHandlers.ofString())
+            if (genResponse.statusCode() in 200..299) return@withContext true
+
+            // If generate fails (embedding models), try embed endpoint
+            val embedBody = """{"model":"$modelName","input":"warmup","keep_alive":"${keepAliveMinutes}m"}"""
+            val embedRequest = HttpRequest.newBuilder()
+                .uri(URI.create("$baseUrl/api/embed"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(embedBody))
+                .timeout(Duration.ofSeconds(300))
+                .build()
+            val embedResponse = httpClient.send(embedRequest, HttpResponse.BodyHandlers.ofString())
+            embedResponse.statusCode() in 200..299
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Unload a model from Ollama memory by setting keep_alive to 0.
+     * Tries /api/generate first, falls back to /api/embed for embedding models.
+     */
+    suspend fun unloadModel(modelName: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val genBody = """{"model":"$modelName","prompt":"","keep_alive":"0"}"""
+            val genRequest = HttpRequest.newBuilder()
+                .uri(URI.create("$baseUrl/api/generate"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(genBody))
+                .timeout(Duration.ofSeconds(30))
+                .build()
+            val genResponse = httpClient.send(genRequest, HttpResponse.BodyHandlers.ofString())
+            if (genResponse.statusCode() in 200..299) return@withContext true
+
+            // Fallback for embedding models
+            val embedBody = """{"model":"$modelName","input":"","keep_alive":"0"}"""
+            val embedRequest = HttpRequest.newBuilder()
+                .uri(URI.create("$baseUrl/api/embed"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(embedBody))
+                .timeout(Duration.ofSeconds(30))
+                .build()
+            val embedResponse = httpClient.send(embedRequest, HttpResponse.BodyHandlers.ofString())
+            embedResponse.statusCode() in 200..299
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Get total system memory in bytes (macOS: sysctl hw.memsize).
+     */
+    fun getSystemMemoryBytes(): Long {
+        return try {
+            val process = ProcessBuilder("sysctl", "-n", "hw.memsize").start()
+            val output = process.inputStream.bufferedReader().readText().trim()
+            process.waitFor()
+            output.toLongOrNull() ?: (16L * 1024 * 1024 * 1024) // default 16 GB
+        } catch (_: Exception) {
+            16L * 1024 * 1024 * 1024 // default 16 GB
+        }
+    }
+}
+
+// ── Running model info ──────────────────────────────────────────────────────────
+
+data class RunningModel(
+    val name: String,
+    val model: String = "",
+    val sizeBytes: Long = 0,
+    val sizeVram: Long = 0,
+    val expiresAt: String = ""
+) {
+    val sizeGb: Double get() = sizeVram.coerceAtLeast(sizeBytes) / (1024.0 * 1024.0 * 1024.0)
 }
 
 // ── Exception ───────────────────────────────────────────────────────────────────

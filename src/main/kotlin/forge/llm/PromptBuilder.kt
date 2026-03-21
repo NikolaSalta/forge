@@ -62,7 +62,12 @@ class PromptBuilder {
             "(no additional evidence)"
         }
 
-        val formattedChunks = if (chunks.isNotEmpty()) {
+        // Token budget: ~16K tokens for context. deepseek-r1:8b supports 128K tokens
+        // but on 18GB M3 with 7GB model loaded, 128K chars causes OOM during inference.
+        // 64K chars ≈ 16K tokens — safe for 8B models, large enough for index summaries.
+        val maxContextChars = 64_000
+
+        var formattedChunks = if (chunks.isNotEmpty()) {
             chunks.mapIndexed { idx, chunk ->
                 "--- Chunk ${idx + 1} ---\n$chunk"
             }.joinToString("\n\n")
@@ -70,12 +75,25 @@ class PromptBuilder {
             "(no context chunks retrieved)"
         }
 
-        val formattedFiles = if (fileContents.isNotEmpty()) {
+        // Truncate chunks to fit model context window
+        if (formattedChunks.length > maxContextChars) {
+            formattedChunks = formattedChunks.take(maxContextChars) +
+                "\n\n[... ${chunks.size} chunks truncated to fit model context window ...]"
+        }
+
+        var formattedFiles = if (fileContents.isNotEmpty()) {
             fileContents.entries.joinToString("\n\n") { (path, content) ->
                 "=== $path ===\n$content"
             }
         } else {
             "(no file contents included)"
+        }
+
+        // Truncate files section too
+        val remainingBudget = maxOf(8_000, maxContextChars - formattedChunks.length)
+        if (formattedFiles.length > remainingBudget) {
+            formattedFiles = formattedFiles.take(remainingBudget) +
+                "\n\n[... file contents truncated ...]"
         }
 
         // Try task-specific user prompt, fall back to generic

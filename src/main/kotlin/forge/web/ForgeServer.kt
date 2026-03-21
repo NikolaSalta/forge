@@ -2,9 +2,11 @@ package forge.web
 
 import forge.ForgeConfig
 import forge.core.Orchestrator
+import forge.llm.AgentOrchestrator
 import forge.llm.ModelSelector
 import forge.llm.OllamaClient
 import forge.workspace.WorkspaceManager
+import kotlinx.coroutines.runBlocking
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -30,6 +32,7 @@ class ForgeServer(
     private val workspaceManager: WorkspaceManager,
     private val modelSelector: ModelSelector,
     private val orchestrator: Orchestrator,
+    private val agentOrchestrator: AgentOrchestrator? = null,
     private val port: Int = 3456
 ) {
     private val webState = WebState(workspaceManager, config)
@@ -48,6 +51,18 @@ class ForgeServer(
         println()
         println("  FORGE Web Dashboard running at http://localhost:$port")
         println("  Repo: ${webState.repoPath ?: "(none selected)"}")
+
+        // Preload always-hot agents on startup
+        if (agentOrchestrator != null && config.agents.preloadOnStartup) {
+            runBlocking {
+                try {
+                    agentOrchestrator.initialize()
+                    println("  Agents: ${config.agents.alwaysHot.joinToString(" + ")} preloaded")
+                } catch (e: Exception) {
+                    println("  Agents: preload failed (${e.message})")
+                }
+            }
+        }
         println()
     }
 
@@ -121,7 +136,8 @@ class ForgeServer(
                 ollamaClient = ollamaClient,
                 workspaceManager = workspaceManager,
                 modelSelector = modelSelector,
-                orchestrator = orchestrator
+                orchestrator = orchestrator,
+                agentOrchestrator = agentOrchestrator
             )
         }
     }

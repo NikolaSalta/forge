@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="draw.io">
+  <diagram name="OllamaClient API Map" id="api-005">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="OllamaClient Methods → Ollama REST API" style="text;html=1;fontSize=20;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="220" y="10" width="600" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- OllamaClient Box -->
+        <mxCell id="client_header" value="&lt;b&gt;OllamaClient&lt;/b&gt;&lt;br&gt;(forge.llm)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="50" y="70" width="200" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Ollama Server -->
+        <mxCell id="server_header" value="&lt;b&gt;Ollama REST API&lt;/b&gt;&lt;br&gt;http://localhost:11434" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="700" y="70" width="250" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Method: chat() -->
+        <mxCell id="m1" value="&lt;b&gt;chat()&lt;/b&gt;&lt;br&gt;Synchronous completion" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="50" y="150" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="r1" value="&lt;b&gt;POST /api/chat&lt;/b&gt;&lt;br&gt;stream: false" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="700" y="150" width="250" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" value="" style="endArrow=block;endFill=1;strokeColor=#82b366;strokeWidth=2;" edge="1" source="m1" target="r1" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Method: chatStream() -->
+        <mxCell id="m2" value="&lt;b&gt;chatStream()&lt;/b&gt;&lt;br&gt;Streaming via Flow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="50" y="220" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="r2" value="&lt;b&gt;POST /api/chat&lt;/b&gt;&lt;br&gt;stream: true (NDJSON)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="700" y="220" width="250" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="" style="endArrow=block;endFill=1;strokeColor=#82b366;strokeWidth=2;" edge="1" source="m2" target="r2" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Method: embed() -->
+        <mxCell id="m3" value="&lt;b&gt;embed()&lt;/b&gt;&lt;br&gt;Generate embeddings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="50" y="290" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="r3" value="&lt;b&gt;POST /api/embeddings&lt;/b&gt;&lt;br&gt;returns float array" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="700" y="290" width="250" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="" style="endArrow=block;endFill=1;strokeColor=#82b366;strokeWidth=2;" edge="1" source="m3" target="r3" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Method: listModels() -->
+        <mxCell id="m4" value="&lt;b&gt;listModels()&lt;/b&gt;&lt;br&gt;Available models" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="50" y="360" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="r4" value="&lt;b&gt;GET /api/tags&lt;/b&gt;&lt;br&gt;returns model list" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="700" y="360" width="250" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="" style="endArrow=block;endFill=1;strokeColor=#82b366;strokeWidth=2;" edge="1" source="m4" target="r4" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Method: getLoadedModels() -->
+        <mxCell id="m5" value="&lt;b&gt;getLoadedModels()&lt;/b&gt;&lt;br&gt;Currently loaded in VRAM" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="50" y="430" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="r5" value="&lt;b&gt;GET /api/ps&lt;/b&gt;&lt;br&gt;returns running models" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="700" y="430" width="250" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="" style="endArrow=block;endFill=1;strokeColor=#82b366;strokeWidth=2;" edge="1" source="m5" target="r5" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Method: preloadModel() -->
+        <mxCell id="m6" value="&lt;b&gt;preloadModel()&lt;/b&gt;&lt;br&gt;Warm up model" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="50" y="500" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="r6" value="&lt;b&gt;POST /api/generate&lt;/b&gt;&lt;br&gt;keep_alive: &quot;30m&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="700" y="500" width="250" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="" style="endArrow=block;endFill=1;strokeColor=#d6b656;strokeWidth=2;" edge="1" source="m6" target="r6" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Method: unloadModel() -->
+        <mxCell id="m7" value="&lt;b&gt;unloadModel()&lt;/b&gt;&lt;br&gt;Free model memory" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="50" y="570" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="r7" value="&lt;b&gt;POST /api/generate&lt;/b&gt;&lt;br&gt;keep_alive: 0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="700" y="570" width="250" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="" style="endArrow=block;endFill=1;strokeColor=#d6b656;strokeWidth=2;" edge="1" source="m7" target="r7" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Method: isAvailable() -->
+        <mxCell id="m8" value="&lt;b&gt;isAvailable()&lt;/b&gt;&lt;br&gt;Health check" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="50" y="640" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="r8" value="&lt;b&gt;GET /&lt;/b&gt;&lt;br&gt;returns &quot;Ollama is running&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="700" y="640" width="250" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="" style="endArrow=block;endFill=1;strokeColor=#82b366;strokeWidth=2;" edge="1" source="m8" target="r8" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="leg1" value="Chat/Query" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="350" y="680" width="80" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2" value="Model Mgmt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="450" y="680" width="80" height="25" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

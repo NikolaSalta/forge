@@ -17,7 +17,8 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class ModelSelector(
     private val config: ForgeConfig,
-    private val client: OllamaClient
+    private val client: OllamaClient,
+    private val agentOrchestrator: AgentOrchestrator? = null
 ) {
     @Volatile
     private var availableModels: Set<String>? = null
@@ -59,7 +60,12 @@ class ModelSelector(
 
         // If nothing is available, return override or primary anyway.
         // The caller will get a clear Ollama error when it tries to use it.
-        return override ?: primary
+        val resolved = override ?: primary
+
+        // Ensure the agent orchestrator has the model warm (best-effort)
+        agentOrchestrator?.ensureAgentReady(role, resolved)
+
+        return resolved
     }
 
     // ── Runtime override API ────────────────────────────────────────────────
@@ -149,4 +155,30 @@ class ModelSelector(
             ModelRole.VISION    -> null
         }
     }
+
+    /**
+     * Returns each model role with its assigned model and loaded status.
+     */
+    suspend fun getActiveModels(): Map<ModelRole, ActiveModelInfo> {
+        val loadedNames = try {
+            client.getLoadedModels().map { it.name }.toSet()
+        } catch (_: Exception) { emptySet() }
+
+        return ModelRole.entries.associateWith { role ->
+            val override = runtimeOverrides[role]
+            val configured = primaryModelForRole(role, config.models)
+            val modelName = override ?: configured
+            ActiveModelInfo(
+                modelName = modelName,
+                isLoaded = loadedNames.any { it == modelName || it.startsWith("${modelName.split(":").first()}:") },
+                isOverride = override != null
+            )
+        }
+    }
 }
+
+data class ActiveModelInfo(
+    val modelName: String,
+    val isLoaded: Boolean,
+    val isOverride: Boolean
+)

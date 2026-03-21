@@ -28,11 +28,11 @@ data class RetrievalResult(
 /**
  * Two-stage hierarchical retriever for massive codebases.
  *
- * Stage 1: Module-level search — identify which IntelliJ modules are relevant
+ * Stage 1: Module-level search — identify which project modules are relevant
  * Stage 2: Chunk-level search — find specific code within those modules
  *
  * This avoids loading all embeddings into memory (which would cause OOM
- * on intellij-community's 167K+ files).
+ * on very large projects with 100K+ files).
  */
 class HierarchicalRetriever(
     private val config: ForgeConfig,

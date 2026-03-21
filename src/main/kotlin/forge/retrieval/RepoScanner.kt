@@ -1,7 +1,6 @@
 package forge.retrieval
 
 import forge.WorkspaceConfig
-import forge.intellij.IntelliJModuleResolver
 import forge.workspace.Database
 import forge.workspace.FileRecord
 import forge.workspace.ModuleRecord
@@ -203,7 +202,10 @@ class RepoScanner(
                 totalBytes = byteTotals[stage]?.get() ?: 0L
             )
         }
-        return ScanResult(stages = stageResults)
+        return ScanResult(
+            filesScanned = stageResults.values.sumOf { it.filesScanned },
+            stages = stageResults
+        )
     }
 
     // -----------------------------------------------------------------------
@@ -320,20 +322,6 @@ class RepoScanner(
     // -----------------------------------------------------------------------
     //  Phase 3-4: Parallel and incremental scanning methods
     // -----------------------------------------------------------------------
-
-    /**
-     * Phase 1: Discover IntelliJ modules and persist to DB.
-     */
-    fun discoverModules(
-        repoPath: Path,
-        repoId: Int,
-        db: Database,
-        moduleResolver: IntelliJModuleResolver
-    ): List<ModuleRecord> {
-        val modules = moduleResolver.discoverModules()
-        moduleResolver.persistToDatabase(modules, repoId, db)
-        return db.getModulesByRepo(repoId)
-    }
 
     /**
      * Phase 2: Parallel file scanning across modules.

@@ -7,6 +7,7 @@ import forge.llm.OllamaClient
 import forge.llm.ResponseParser
 import forge.web.TraceEvent
 import forge.workspace.Database
+import forge.workspace.EntityRecord
 import forge.workspace.FileRecord
 import kotlinx.coroutines.channels.SendChannel
 import java.nio.file.Files
@@ -301,8 +302,11 @@ class DeepAnalyzer(
         // Read file contents within budget
         val fileContents = readFilesWithBudget(moduleFiles, repoPath)
 
+        // Enrich with index entities — gives LLM real class/method names to anchor on
+        val indexSummary = buildIndexSummaryForModule(db, moduleFiles)
+
         // Build deep analysis prompt
-        val messages = buildDeepAnalysisPrompt(modulePath, fileContents, moduleFiles.size)
+        val messages = buildDeepAnalysisPrompt(modulePath, fileContents, moduleFiles.size, indexSummary)
 
         // Call LLM with streaming
         val model = modelSelector.selectForTask(TaskType.REPO_ANALYSIS)
@@ -424,6 +428,80 @@ class DeepAnalyzer(
         }
     }
 
+    /**
+     * Build a structural summary from the absolute index for a specific module's files.
+     * This gives the LLM real class names, method names, and relationships to prevent hallucination.
+     */
+    private fun buildIndexSummaryForModule(db: Database, moduleFiles: List<FileRecord>): String {
+        val fileIds = moduleFiles.mapNotNull { it.id }.toSet()
+        if (fileIds.isEmpty()) return ""
+
+        // Get entities belonging to this module's files
+        val entities = mutableListOf<EntityRecord>()
+        for (fileId in fileIds.take(500)) { // Limit to avoid OOM on huge modules
+            entities.addAll(db.getEntitiesByFile(fileId))
+            if (entities.size > 500) break
+        }
+        if (entities.isEmpty()) return ""
+
+        val classes = entities.filter { it.entityType == "class" }
+        val interfaces = entities.filter { it.entityType == "interface" }
+        val functions = entities.filter { it.entityType == "function" }
+        val enums = entities.filter { it.entityType == "enum" }
+
+        return buildString {
+            appendLine("## Pre-indexed Entities (from absolute project index — these are REAL, use these names)")
+            appendLine()
+            appendLine("Found: ${classes.size} classes, ${interfaces.size} interfaces, ${functions.size} functions, ${enums.size} enums")
+            appendLine()
+
+            if (classes.isNotEmpty()) {
+                appendLine("### Classes")
+                for (cls in classes.take(40)) {
+                    val file = db.getFileById(cls.fileId)
+                    append("- `${cls.name}`")
+                    if (!cls.signature.isNullOrBlank()) append(" — ${cls.signature!!.take(100)}")
+                    if (file != null) append(" (${file.relativePath}:${cls.startLine})")
+                    appendLine()
+                    // Show extends/implements
+                    val rels = db.getRelationshipsBySource(cls.id)
+                        .filter { it.relationship in listOf("extends", "implements") }
+                    for (rel in rels.take(5)) {
+                        appendLine("  ${rel.relationship} `${rel.targetName}`")
+                    }
+                }
+                appendLine()
+            }
+
+            if (interfaces.isNotEmpty()) {
+                appendLine("### Interfaces")
+                for (iface in interfaces.take(20)) {
+                    append("- `${iface.name}`")
+                    if (!iface.signature.isNullOrBlank()) append(" — ${iface.signature!!.take(100)}")
+                    appendLine()
+                }
+                appendLine()
+            }
+
+            if (enums.isNotEmpty()) {
+                appendLine("### Enums")
+                for (en in enums.take(10)) {
+                    appendLine("- `${en.name}`")
+                }
+                appendLine()
+            }
+
+            if (functions.isNotEmpty()) {
+                appendLine("### Key Functions (${functions.size} total, showing top 20)")
+                for (fn in functions.sortedByDescending { (it.endLine ?: 0) - (it.startLine ?: 0) }.take(20)) {
+                    append("- `${fn.name}`")
+                    if (!fn.signature.isNullOrBlank()) append(" — ${fn.signature!!.take(100)}")
+                    appendLine()
+                }
+            }
+        }
+    }
+
     // ── Prompt building ──────────────────────────────────────────────────────
 
     /**
@@ -432,18 +510,27 @@ class DeepAnalyzer(
     private fun buildDeepAnalysisPrompt(
         modulePath: String,
         files: Map<String, String>,
-        totalFiles: Int
+        totalFiles: Int,
+        indexSummary: String = ""
     ): List<ChatMessage> {
         val system = """You are a senior software architect performing a deep code analysis.
 Analyze the provided module with MAXIMUM DEPTH and PRECISION.
-Use ACTUAL names from the code — classes, methods, fields, types, endpoints, tables.
-Never invent or guess names. If a file is truncated, note what was visible.
+Use ONLY ACTUAL names from the code and from the provided index data.
+NEVER invent, guess, or hallucinate class names, module names, or architectures.
+If you see specific class/method names in the index data, USE THOSE EXACT NAMES.
+If a file is truncated, note what was visible. If you don't know something, say so.
 Format your response in well-structured markdown."""
 
         val user = buildString {
             appendLine("# Deep Analysis: Module \"$modulePath\"")
             appendLine("This module contains $totalFiles source files. ${files.size} are shown below.")
             appendLine()
+
+            // Inject index data FIRST so the LLM sees real entity names before code
+            if (indexSummary.isNotBlank()) {
+                appendLine(indexSummary)
+                appendLine()
+            }
 
             // List all file contents
             for ((path, content) in files) {

@@ -16,7 +16,7 @@ class LineIndexService {
     fun buildAll(db: Database, repoPath: Path, batchSize: Int = 2000): Int {
         val files = db.getAllFiles().filter { file ->
             val cat = file.category?.lowercase() ?: ""
-            cat in setOf("source", "test")
+            cat in setOf("source", "test", "build", "config", "runtime", "docs")
         }
 
         var totalLines = 0
@@ -26,12 +26,11 @@ class LineIndexService {
             val filePath = repoPath.resolve(file.relativePath)
             if (!Files.exists(filePath) || (file.sizeBytes ?: 0) > 2_000_000) continue
 
-            val lineCount = file.lineCount ?: continue
-            if (lineCount == 0) continue
-
-            val entities = db.getEntitiesByFile(file.id)
             val content = try { Files.readString(filePath) } catch (_: Exception) { continue }
             val lines = content.lines()
+            if (lines.isEmpty()) continue
+
+            val entities = db.getEntitiesByFile(file.id)
 
             for (lineIdx in lines.indices) {
                 val lineNum = lineIdx + 1

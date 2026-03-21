@@ -8,16 +8,16 @@ import java.nio.file.Paths
 
 data class OllamaConfig(
     val host: String = "http://127.0.0.1:11434",
-    val timeoutSeconds: Int = 120,
-    val retryCount: Int = 1
+    val timeoutSeconds: Int = 300,
+    val retryCount: Int = 3
 )
 
 data class ModelsConfig(
     val classify: String = "qwen3:1.7b",
     val reason: String = "deepseek-r1:8b",
     val code: String = "qwen2.5-coder:14b",
-    val embed: String = "nomic-embed-text",
-    val summarize: String = "ministral-3:8b",
+    val embed: String = "qwen3-embedding:0.6b",
+    val summarize: String = "qwen2.5:14b",
     val vision: String = "qwen2.5vl:7b",
     val fallback: FallbackModels = FallbackModels()
 )
@@ -38,7 +38,7 @@ data class WorkspaceConfig(
 )
 
 data class RetrievalConfig(
-    val maxContextChunks: Int = 200_000,
+    val maxContextChunks: Int = 50,
     val similarityThreshold: Float = 0.50f,
     val embeddingBatchSize: Int = 10,
     val scanIgnore: List<String> = listOf(
@@ -60,18 +60,6 @@ data class UiConfig(
     val showTrace: Boolean = true,
     val showEvidence: Boolean = true,
     val streaming: Boolean = true
-)
-
-data class IntellijConfig(
-    val enabled: Boolean = false,
-    val modulePriorities: List<String> = listOf(
-        "platform/platform-api", "platform/platform-impl",
-        "platform/core-api", "platform/core-impl",
-        "platform/lang-api", "platform/lang-impl"
-    ),
-    val skipModules: List<String> = listOf("images"),
-    val maxModulesDeepScan: Int = 500_000,
-    val extensionPointCacheHours: Int = 24
 )
 
 data class SatelliteRepo(
@@ -120,6 +108,21 @@ data class EvolutionConfig(
     val piiFilterEnabled: Boolean = true
 )
 
+data class AgentOrchestrationConfig(
+    val enabled: Boolean = true,
+    val alwaysHot: List<String> = listOf("qwen3:1.7b", "deepseek-r1:8b"),
+    val specialistModels: Map<String, String> = mapOf(
+        "CODE" to "qwen2.5-coder:14b",
+        "EMBED" to "qwen3-embedding:0.6b",
+        "SUMMARIZE" to "qwen2.5:14b",
+        "VISION" to "qwen2.5vl:7b"
+    ),
+    val preloadOnStartup: Boolean = true,
+    val maxTotalMemoryGb: Double = 12.0,
+    val heavyModelThresholdGb: Double = 6.0,
+    val keepAliveMinutes: Int = 10
+)
+
 data class ForgeConfig(
     val ollama: OllamaConfig = OllamaConfig(),
     val models: ModelsConfig = ModelsConfig(),
@@ -127,11 +130,11 @@ data class ForgeConfig(
     val retrieval: RetrievalConfig = RetrievalConfig(),
     val voice: VoiceInputConfig = VoiceInputConfig(),
     val ui: UiConfig = UiConfig(),
-    val intellij: IntellijConfig = IntellijConfig(),
     val multiRepo: MultiRepoConfig = MultiRepoConfig(),
     val scale: ScaleConfig = ScaleConfig(),
     val decomposition: DecompositionConfig = DecompositionConfig(),
-    val evolution: EvolutionConfig = EvolutionConfig()
+    val evolution: EvolutionConfig = EvolutionConfig(),
+    val agents: AgentOrchestrationConfig = AgentOrchestrationConfig()
 ) {
     fun resolvedWorkspaceDir(): Path {
         val dir = workspace.baseDir.replaceFirst("~", System.getProperty("user.home"))
@@ -199,11 +202,11 @@ data class ForgeConfig(
             val retrievalMap = data["retrieval"] as? Map<String, Any> ?: emptyMap()
             val voiceMap = data["voice"] as? Map<String, Any> ?: emptyMap()
             val uiMap = data["ui"] as? Map<String, Any> ?: emptyMap()
-            val intellijMap = data["intellij"] as? Map<String, Any> ?: emptyMap()
             val multiRepoMap = data["multi_repo"] as? Map<String, Any> ?: emptyMap()
             val scaleMap = data["scale"] as? Map<String, Any> ?: emptyMap()
             val decompMap = data["decomposition"] as? Map<String, Any> ?: emptyMap()
             val evolutionMap = data["evolution"] as? Map<String, Any> ?: emptyMap()
+            val agentsMap = data["agents"] as? Map<String, Any> ?: emptyMap()
             val satellitesList = (multiRepoMap["satellites"] as? List<*>)?.mapNotNull { item ->
                 val m = item as? Map<*, *> ?: return@mapNotNull null
                 SatelliteRepo(
@@ -242,7 +245,7 @@ data class ForgeConfig(
                     maxChunksPerFile = (workspaceMap["max_chunks_per_file"] as? Number)?.toInt() ?: 200_000
                 ),
                 retrieval = RetrievalConfig(
-                    maxContextChunks = (retrievalMap["max_context_chunks"] as? Number)?.toInt() ?: 200_000,
+                    maxContextChunks = (retrievalMap["max_context_chunks"] as? Number)?.toInt() ?: 50,
                     similarityThreshold = (retrievalMap["similarity_threshold"] as? Number)?.toFloat() ?: 0.50f,
                     embeddingBatchSize = (retrievalMap["embedding_batch_size"] as? Number)?.toInt() ?: 10,
                     scanIgnore = (retrievalMap["scan_ignore"] as? List<*>)?.map { it.toString() }
@@ -260,15 +263,6 @@ data class ForgeConfig(
                     showTrace = uiMap["show_trace"] as? Boolean ?: true,
                     showEvidence = uiMap["show_evidence"] as? Boolean ?: true,
                     streaming = uiMap["streaming"] as? Boolean ?: true
-                ),
-                intellij = IntellijConfig(
-                    enabled = intellijMap["enabled"] as? Boolean ?: false,
-                    modulePriorities = (intellijMap["module_priorities"] as? List<*>)?.map { it.toString() }
-                        ?: IntellijConfig().modulePriorities,
-                    skipModules = (intellijMap["skip_modules"] as? List<*>)?.map { it.toString() }
-                        ?: IntellijConfig().skipModules,
-                    maxModulesDeepScan = (intellijMap["max_modules_deep_scan"] as? Number)?.toInt() ?: 500_000,
-                    extensionPointCacheHours = (intellijMap["extension_point_cache_hours"] as? Number)?.toInt() ?: 24
                 ),
                 multiRepo = MultiRepoConfig(
                     satellites = satellitesList,
@@ -305,6 +299,25 @@ data class ForgeConfig(
                     modelExportDir = evolutionMap["model_export_dir"] as? String ?: "~/.forge/models/exports",
                     datasetFormat = evolutionMap["dataset_format"] as? String ?: "jsonl",
                     piiFilterEnabled = evolutionMap["pii_filter_enabled"] as? Boolean ?: true
+                ),
+                agents = AgentOrchestrationConfig(
+                    enabled = agentsMap["enabled"] as? Boolean ?: true,
+                    alwaysHot = (agentsMap["always_hot"] as? List<*>)?.mapNotNull { it as? String }
+                        ?: listOf("qwen3:1.7b", "deepseek-r1:8b"),
+                    specialistModels = (agentsMap["specialist_models"] as? Map<*, *>)?.mapNotNull { (k, v) ->
+                        val key = k as? String ?: return@mapNotNull null
+                        val value = v as? String ?: return@mapNotNull null
+                        key to value
+                    }?.toMap() ?: mapOf(
+                        "CODE" to "qwen2.5-coder:14b",
+                        "EMBED" to "qwen3-embedding:0.6b",
+                        "SUMMARIZE" to "qwen2.5:14b",
+                        "VISION" to "qwen2.5vl:7b"
+                    ),
+                    preloadOnStartup = agentsMap["preload_on_startup"] as? Boolean ?: true,
+                    maxTotalMemoryGb = (agentsMap["max_total_memory_gb"] as? Number)?.toDouble() ?: 12.0,
+                    heavyModelThresholdGb = (agentsMap["heavy_model_threshold_gb"] as? Number)?.toDouble() ?: 6.0,
+                    keepAliveMinutes = (agentsMap["keep_alive_minutes"] as? Number)?.toInt() ?: 10
                 )
             )
         }

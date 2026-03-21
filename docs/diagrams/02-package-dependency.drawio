@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="draw.io">
+  <diagram name="Package Dependency Graph" id="pkg-002">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="Package Dependency Graph" style="text;html=1;fontSize=20;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="300" y="10" width="500" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- forge.web -->
+        <mxCell id="web" value="&lt;b&gt;forge.web&lt;/b&gt;&lt;br&gt;ForgeServer, ApiRoutes&lt;br&gt;WebState, SSE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="400" y="60" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- forge.core -->
+        <mxCell id="core" value="&lt;b&gt;forge.core&lt;/b&gt;&lt;br&gt;Orchestrator, Pipeline&lt;br&gt;IntentResolver, DeepAnalyzer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="400" y="200" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- forge.core.prompt -->
+        <mxCell id="prompt" value="&lt;b&gt;forge.core.prompt&lt;/b&gt;&lt;br&gt;PromptAnalyzer&lt;br&gt;ExecutionPlanner" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="200" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- forge.llm -->
+        <mxCell id="llm" value="&lt;b&gt;forge.llm&lt;/b&gt;&lt;br&gt;OllamaClient, ModelSelector&lt;br&gt;AgentOrchestrator" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="200" y="360" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- forge.retrieval -->
+        <mxCell id="retrieval" value="&lt;b&gt;forge.retrieval&lt;/b&gt;&lt;br&gt;RepoScanner, Chunker&lt;br&gt;HierarchicalRetriever" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="600" y="360" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- forge.workspace -->
+        <mxCell id="workspace" value="&lt;b&gt;forge.workspace&lt;/b&gt;&lt;br&gt;WorkspaceManager&lt;br&gt;Database, EmbeddingStore" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="400" y="520" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- forge.index -->
+        <mxCell id="index" value="&lt;b&gt;forge.index&lt;/b&gt;&lt;br&gt;ProjectIndexCoordinator&lt;br&gt;EntityExtraction" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="520" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- forge.evolution -->
+        <mxCell id="evolution" value="&lt;b&gt;forge.evolution&lt;/b&gt;&lt;br&gt;TrainingDataCollector&lt;br&gt;DatasetBuilder" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="700" y="520" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- web → core -->
+        <mxCell id="e1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#d6b656;endArrow=block;endFill=1;" edge="1" source="web" target="core" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- web → llm -->
+        <mxCell id="e2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#d6b656;endArrow=block;endFill=1;" edge="1" source="web" target="llm" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- core → llm -->
+        <mxCell id="e3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#6c8ebf;endArrow=block;endFill=1;" edge="1" source="core" target="llm" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- core → retrieval -->
+        <mxCell id="e4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#6c8ebf;endArrow=block;endFill=1;" edge="1" source="core" target="retrieval" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- core → workspace -->
+        <mxCell id="e5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#6c8ebf;endArrow=block;endFill=1;" edge="1" source="core" target="workspace" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- prompt → core -->
+        <mxCell id="e6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#6c8ebf;endArrow=block;endFill=1;" edge="1" source="prompt" target="core" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- llm → workspace -->
+        <mxCell id="e7" value="embeddings" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#82b366;endArrow=block;endFill=1;fontStyle=2;fontSize=10;" edge="1" source="llm" target="workspace" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- index → workspace -->
+        <mxCell id="e8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#9673a6;endArrow=block;endFill=1;" edge="1" source="index" target="workspace" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- evolution → workspace -->
+        <mxCell id="e9" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#9673a6;endArrow=block;endFill=1;" edge="1" source="evolution" target="workspace" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- retrieval → workspace -->
+        <mxCell id="e10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;strokeColor=#82b366;endArrow=block;endFill=1;" edge="1" source="retrieval" target="workspace" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="draw.io">
+  <diagram name="Memory-Aware Model Swapping" id="mem-010">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="Memory-Aware Model Swapping Decision Tree" style="text;html=1;fontSize=20;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="220" y="10" width="600" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Entry -->
+        <mxCell id="entry" value="&lt;b&gt;Incoming Task&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="430" y="60" width="160" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Decision: What role? -->
+        <mxCell id="d1" value="Task&lt;br&gt;Role?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="450" y="130" width="120" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ed1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;" edge="1" source="entry" target="d1" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- CLASSIFY branch -->
+        <mxCell id="classify" value="&lt;b&gt;CLASSIFY&lt;/b&gt;&lt;br&gt;Agent 1 (qwen3:1.7b)&lt;br&gt;&lt;font color=&quot;#00AA00&quot;&gt;Always hot — 1.5GB&lt;/font&gt;&lt;br&gt;No swap needed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="50" y="130" width="180" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="ec1" value="CLASSIFY" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;fontStyle=1;fontSize=10;" edge="1" source="d1" target="classify" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- REASON branch -->
+        <mxCell id="reason" value="&lt;b&gt;REASON&lt;/b&gt;&lt;br&gt;Agent 2 (deepseek-r1:8b)&lt;br&gt;&lt;font color=&quot;#00AA00&quot;&gt;Always hot — 5GB&lt;/font&gt;&lt;br&gt;No swap needed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="800" y="130" width="180" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="ec2" value="REASON" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;fontStyle=1;fontSize=10;" edge="1" source="d1" target="reason" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Specialist decision -->
+        <mxCell id="d2" value="Specialist&lt;br&gt;Type?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="450" y="260" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="ec3" value="SPECIALIST" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;fontStyle=1;fontSize=10;" edge="1" source="d1" target="d2" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- EMBED -->
+        <mxCell id="embed" value="&lt;b&gt;EMBED&lt;/b&gt;&lt;br&gt;Light: 0.5GB&lt;br&gt;&lt;font color=&quot;#00AA00&quot;&gt;Load alongside&lt;/font&gt;&lt;br&gt;A1(1.5) + A2(5) + 0.5 = 7GB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="50" y="270" width="190" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ee1" value="EMBED" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;fontStyle=1;fontSize=10;" edge="1" source="d2" target="embed" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- VISION -->
+        <mxCell id="vision" value="&lt;b&gt;VISION&lt;/b&gt;&lt;br&gt;Light-medium: 4.5GB&lt;br&gt;&lt;font color=&quot;#00AA00&quot;&gt;Load alongside&lt;/font&gt;&lt;br&gt;A1(1.5) + A2(5) + 4.5 = 11GB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="260" y="380" width="190" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ee2" value="VISION" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;fontStyle=1;fontSize=10;" edge="1" source="d2" target="vision" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- CODE -->
+        <mxCell id="code" value="&lt;b&gt;CODE&lt;/b&gt;&lt;br&gt;Heavy: 9GB&lt;br&gt;&lt;font color=&quot;#CC0000&quot;&gt;Swap required&lt;/font&gt;&lt;br&gt;A1(1.5) + 9 = 10.5GB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="570" y="380" width="190" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ee3" value="CODE" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;fontStyle=1;fontSize=10;" edge="1" source="d2" target="code" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- SUMMARIZE -->
+        <mxCell id="summarize" value="&lt;b&gt;SUMMARIZE&lt;/b&gt;&lt;br&gt;Heavy: 9GB&lt;br&gt;&lt;font color=&quot;#CC0000&quot;&gt;Swap required&lt;/font&gt;&lt;br&gt;A1(1.5) + 9 = 10.5GB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="820" y="380" width="190" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ee4" value="SUMMARIZE" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;fontStyle=1;fontSize=10;" edge="1" source="d2" target="summarize" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Swap sequence for heavy -->
+        <mxCell id="swap_title" value="&lt;b&gt;Heavy Specialist Swap Sequence&lt;/b&gt;" style="text;html=1;fontSize=13;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="350" y="490" width="350" height="25" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sw1" value="1. Unload&lt;br&gt;Agent 2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="150" y="530" width="100" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="sw2" value="2. Free&lt;br&gt;5GB VRAM" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="290" y="530" width="100" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="sw3" value="3. Load&lt;br&gt;Specialist" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="430" y="530" width="100" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="sw4" value="4. Execute&lt;br&gt;Task" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="570" y="530" width="100" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="sw5" value="5. Unload&lt;br&gt;Specialist" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="710" y="530" width="100" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="sw6" value="6. Reload&lt;br&gt;Agent 2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="850" y="530" width="100" height="45" as="geometry" />
+        </mxCell>
+
+        <mxCell id="esw1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" source="sw1" target="sw2" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="esw2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" source="sw2" target="sw3" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="esw3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" source="sw3" target="sw4" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="esw4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" source="sw4" target="sw5" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="esw5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" source="sw5" target="sw6" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Memory budget note -->
+        <mxCell id="budget" value="Memory Budget: 16GB total | 4GB OS | 12GB models&lt;br&gt;Always resident: Agent 1 (1.5GB) = 10.5GB available for Agent 2 + Specialist" style="text;html=1;fontSize=11;fontStyle=2;align=center;fillColor=#f5f5f5;rounded=1;strokeColor=#CCCCCC;" vertex="1" parent="1">
+          <mxGeometry x="200" y="600" width="600" height="40" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

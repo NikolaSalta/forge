@@ -89,6 +89,20 @@ data class TraceEvent(
             model = model,
             totalDurationMs = totalDurationMs
         )
+
+        fun indexProgress(phase: String, detail: String, current: Int, total: Int) = TraceEvent(
+            type = "index_progress",
+            stageName = phase,
+            detail = detail,
+            stageIndex = current,
+            totalStages = total
+        )
+
+        fun indexCompleted(detail: String, durationMs: Long) = TraceEvent(
+            type = "index_completed",
+            detail = detail,
+            totalDurationMs = durationMs
+        )
     }
 
     fun toSSE(): String {
