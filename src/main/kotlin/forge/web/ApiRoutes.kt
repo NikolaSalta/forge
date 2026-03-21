@@ -6,6 +6,8 @@ import forge.core.Orchestrator
 import forge.evolution.DatasetBuilder
 import forge.evolution.LocalModelRegistry
 import forge.evolution.ModelEvolutionPlanner
+import forge.index.IndexQueryService
+import forge.index.ProjectIndexCoordinator
 import forge.llm.ModelSelector
 import forge.llm.OllamaClient
 import forge.workspace.WorkspaceManager
@@ -687,6 +689,137 @@ fun Routing.apiRoutes(
                 } else {
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(result.message))
                 }
+            }
+        }
+
+        // ── Index endpoints ──────────────────────────────────────
+
+        route("/index") {
+
+            get("/status") {
+                val db = webState.database
+                if (db == null) {
+                    call.respond(IndexStatusResponse())
+                    return@get
+                }
+                val result = withContext(Dispatchers.IO) {
+                    val queryService = IndexQueryService(db)
+                    val stats = queryService.getIndexStats()
+                    IndexStatusResponse(
+                        indexed = stats.totalEntities > 0,
+                        lastIndexedAt = stats.lastIndexedAt,
+                        indexStatus = stats.indexStatus,
+                        totalEntities = stats.totalEntities,
+                        totalRelationships = stats.totalRelationships,
+                        totalLinesIndexed = stats.totalLinesIndexed,
+                        totalDependencyEdges = stats.totalDependencyEdges,
+                        entitiesByType = stats.entitiesByType,
+                        relationshipsByType = stats.relationshipsByType,
+                        filesByClassification = stats.filesByClassification
+                    )
+                }
+                call.respond(result)
+            }
+
+            get("/entities") {
+                val db = webState.database
+                if (db == null) {
+                    call.respond(emptyList<EntityResponse>())
+                    return@get
+                }
+                val query = call.request.queryParameters["q"] ?: ""
+                val type = call.request.queryParameters["type"]
+                val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 50
+                val result = withContext(Dispatchers.IO) {
+                    val entities = if (query.isNotEmpty()) {
+                        db.searchEntities(query, limit)
+                    } else if (type != null) {
+                        db.getEntitiesByType(type, limit)
+                    } else {
+                        db.searchEntities("", limit)
+                    }
+                    entities.map { e ->
+                        val file = db.getFileById(e.fileId)
+                        EntityResponse(
+                            id = e.id, name = e.name,
+                            qualifiedName = e.qualifiedName, entityType = e.entityType,
+                            filePath = file?.relativePath, startLine = e.startLine,
+                            endLine = e.endLine, visibility = e.visibility,
+                            language = e.language, signature = e.signature
+                        )
+                    }
+                }
+                call.respond(result)
+            }
+
+            get("/entities/{id}") {
+                val db = webState.database
+                if (db == null) {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("No workspace"))
+                    return@get
+                }
+                val entityId = call.parameters["id"]?.toIntOrNull()
+                if (entityId == null) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid entity ID"))
+                    return@get
+                }
+                val result = withContext(Dispatchers.IO) {
+                    val entity = db.getEntityById(entityId)
+                    if (entity == null) return@withContext null
+                    val file = db.getFileById(entity.fileId)
+                    val outgoing = db.getRelationshipsBySource(entityId)
+                    val incoming = db.getRelationshipsByTarget(entityId)
+                    EntityDetailResponse(
+                        entity = EntityResponse(
+                            id = entity.id, name = entity.name,
+                            qualifiedName = entity.qualifiedName, entityType = entity.entityType,
+                            filePath = file?.relativePath, startLine = entity.startLine,
+                            endLine = entity.endLine, visibility = entity.visibility,
+                            language = entity.language, signature = entity.signature
+                        ),
+                        outgoing = outgoing.map { r ->
+                            RelationshipResponse(r.sourceEntityId, "", r.targetEntityId,
+                                r.targetName, r.relationship, r.confidence, r.sourceLine)
+                        },
+                        incoming = incoming.map { r ->
+                            RelationshipResponse(r.sourceEntityId, "", r.targetEntityId,
+                                r.targetName, r.relationship, r.confidence, r.sourceLine)
+                        }
+                    )
+                }
+                if (result == null) {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Entity not found"))
+                } else {
+                    call.respond(result)
+                }
+            }
+
+            get("/classifications") {
+                val db = webState.database
+                if (db == null) {
+                    call.respond(mapOf("byClass" to emptyMap<String, Int>()))
+                    return@get
+                }
+                val result = withContext(Dispatchers.IO) {
+                    db.getClassificationOverview()
+                }
+                call.respond(mapOf("byClass" to result))
+            }
+
+            post("/rebuild") {
+                val db = webState.database
+                val repoPath = webState.repoPath
+                if (db == null || repoPath == null) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("No workspace set"))
+                    return@post
+                }
+                CoroutineScope(Dispatchers.IO).launch {
+                    val coordinator = ProjectIndexCoordinator(db, java.nio.file.Path.of(repoPath), config)
+                    coordinator.buildFullIndex { phase, detail ->
+                        println("[INDEX] $phase: $detail")
+                    }
+                }
+                call.respond(SuccessResponse("Index rebuild started"))
             }
         }
     }

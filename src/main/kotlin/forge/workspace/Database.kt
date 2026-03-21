@@ -109,6 +109,77 @@ data class EpImplementationRecord(
     val pluginXmlPath: String?
 )
 
+// ── Index data classes ────────────────────────────────────────
+
+data class EntityRecord(
+    val id: Int,
+    val fileId: Int,
+    val moduleId: Int?,
+    val entityType: String,
+    val name: String,
+    val qualifiedName: String?,
+    val parentEntityId: Int?,
+    val language: String?,
+    val visibility: String?,
+    val signature: String?,
+    val startLine: Int,
+    val endLine: Int,
+    val sha256: String?
+)
+
+data class EntityRelationshipRecord(
+    val id: Int,
+    val sourceEntityId: Int,
+    val targetEntityId: Int?,
+    val targetName: String,
+    val relationship: String,
+    val confidence: Double,
+    val sourceLine: Int?
+)
+
+data class LineIndexRecord(
+    val id: Int,
+    val fileId: Int,
+    val lineNum: Int,
+    val entityId: Int?,
+    val lineType: String?
+)
+
+data class DependencyEdge(
+    val id: Int,
+    val sourceModuleId: Int?,
+    val targetModuleId: Int?,
+    val sourcePath: String,
+    val targetPath: String,
+    val depType: String,
+    val weight: Int
+)
+
+data class FileClassification(
+    val id: Int,
+    val fileId: Int,
+    val primaryClass: String,
+    val secondaryClass: String?,
+    val frameworkHint: String?,
+    val entryPoint: Boolean,
+    val generated: Boolean
+)
+
+data class IndexMetadataRecord(
+    val id: Int,
+    val indexType: String,
+    val status: String,
+    val startedAt: String?,
+    val completedAt: String?,
+    val durationMs: Long?,
+    val filesProcessed: Int,
+    val entitiesFound: Int,
+    val relationshipsFound: Int,
+    val errors: String?,
+    val commitSha: String?,
+    val trigger: String?
+)
+
 // ──────────────────────────────────────────────────────────────
 // Database wrapper
 // ──────────────────────────────────────────────────────────────
@@ -377,6 +448,94 @@ class Database(workspacePath: Path) {
                 created_at     TEXT DEFAULT (datetime('now'))
             )
         """.trimIndent())
+
+        // ── Project Index tables ──────────────────────────────────
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS entities (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id          INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+                module_id        INTEGER REFERENCES modules(id),
+                entity_type      TEXT NOT NULL,
+                name             TEXT NOT NULL,
+                qualified_name   TEXT,
+                parent_entity_id INTEGER REFERENCES entities(id),
+                language         TEXT,
+                visibility       TEXT,
+                signature        TEXT,
+                start_line       INTEGER NOT NULL,
+                end_line         INTEGER NOT NULL,
+                sha256           TEXT,
+                created_at       TEXT DEFAULT (datetime('now')),
+                updated_at       TEXT
+            )
+        """.trimIndent())
+
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS entity_relationships (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+                target_entity_id INTEGER REFERENCES entities(id) ON DELETE SET NULL,
+                target_name      TEXT NOT NULL,
+                relationship     TEXT NOT NULL,
+                confidence       REAL DEFAULT 1.0,
+                source_line      INTEGER,
+                created_at       TEXT DEFAULT (datetime('now'))
+            )
+        """.trimIndent())
+
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS line_index (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id   INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+                line_num  INTEGER NOT NULL,
+                entity_id INTEGER REFERENCES entities(id) ON DELETE CASCADE,
+                line_type TEXT,
+                UNIQUE(file_id, line_num)
+            )
+        """.trimIndent())
+
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS dependency_graph (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_module_id INTEGER REFERENCES modules(id) ON DELETE CASCADE,
+                target_module_id INTEGER REFERENCES modules(id) ON DELETE SET NULL,
+                source_path      TEXT NOT NULL,
+                target_path      TEXT NOT NULL,
+                dep_type         TEXT NOT NULL DEFAULT 'compile',
+                weight           INTEGER DEFAULT 1,
+                created_at       TEXT DEFAULT (datetime('now'))
+            )
+        """.trimIndent())
+
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS file_classifications (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id         INTEGER UNIQUE NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+                primary_class   TEXT NOT NULL,
+                secondary_class TEXT,
+                framework_hint  TEXT,
+                entry_point     INTEGER DEFAULT 0,
+                generated       INTEGER DEFAULT 0,
+                created_at      TEXT DEFAULT (datetime('now'))
+            )
+        """.trimIndent())
+
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS index_metadata (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                index_type          TEXT NOT NULL,
+                status              TEXT NOT NULL,
+                started_at          TEXT,
+                completed_at        TEXT,
+                duration_ms         INTEGER,
+                files_processed     INTEGER DEFAULT 0,
+                entities_found      INTEGER DEFAULT 0,
+                relationships_found INTEGER DEFAULT 0,
+                errors              TEXT,
+                commit_sha          TEXT,
+                trigger_type        TEXT
+            )
+        """.trimIndent())
     }
 
     private fun createIndexes(stmt: Statement) {
@@ -396,6 +555,24 @@ class Database(workspacePath: Path) {
         stmt.execute("CREATE INDEX IF NOT EXISTS idx_td_quality        ON training_data(quality_score)")
         stmt.execute("CREATE INDEX IF NOT EXISTS idx_td_validated      ON training_data(is_validated)")
         stmt.execute("CREATE INDEX IF NOT EXISTS idx_mr_status         ON model_registry(status)")
+        // Project Index indexes
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_entities_file_id        ON entities(file_id)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_entities_module_id      ON entities(module_id)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_entities_type           ON entities(entity_type)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_entities_name           ON entities(name)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_entities_qualified_name ON entities(qualified_name)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_entities_parent_id      ON entities(parent_entity_id)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_er_source               ON entity_relationships(source_entity_id)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_er_target               ON entity_relationships(target_entity_id)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_er_rel_type             ON entity_relationships(relationship)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_er_tgt_name             ON entity_relationships(target_name)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_li_file_line            ON line_index(file_id, line_num)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_li_entity_id            ON line_index(entity_id)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_dg_source               ON dependency_graph(source_module_id)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_dg_target               ON dependency_graph(target_module_id)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_fc_class                ON file_classifications(primary_class)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_im_type                 ON index_metadata(index_type)")
+        stmt.execute("CREATE INDEX IF NOT EXISTS idx_im_status               ON index_metadata(status)")
     }
 
     private fun migrateFilesTable() {
@@ -1709,5 +1886,837 @@ class Database(workspacePath: Path) {
             }
             return results
         }
+    }
+
+    // ── Entity CRUD ──────────────────────────────────────────────
+
+    fun insertEntity(
+        fileId: Int,
+        moduleId: Int?,
+        entityType: String,
+        name: String,
+        qualifiedName: String?,
+        parentEntityId: Int?,
+        language: String?,
+        visibility: String?,
+        signature: String?,
+        startLine: Int,
+        endLine: Int,
+        sha256: String?
+    ): Int {
+        synchronized(lock) {
+            val conn = getConnection()
+            val sql = """
+                INSERT INTO entities (file_id, module_id, entity_type, name, qualified_name, parent_entity_id, language, visibility, signature, start_line, end_line, sha256, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """.trimIndent()
+            conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS).use { ps ->
+                ps.setInt(1, fileId)
+                if (moduleId != null) ps.setInt(2, moduleId) else ps.setNull(2, java.sql.Types.INTEGER)
+                ps.setString(3, entityType)
+                ps.setString(4, name)
+                ps.setString(5, qualifiedName)
+                if (parentEntityId != null) ps.setInt(6, parentEntityId) else ps.setNull(6, java.sql.Types.INTEGER)
+                ps.setString(7, language)
+                ps.setString(8, visibility)
+                ps.setString(9, signature)
+                ps.setInt(10, startLine)
+                ps.setInt(11, endLine)
+                ps.setString(12, sha256)
+                ps.setString(13, Instant.now().toString())
+                ps.executeUpdate()
+                ps.generatedKeys.use { rs ->
+                    return if (rs.next()) rs.getInt(1) else -1
+                }
+            }
+        }
+    }
+
+    fun insertEntitiesBatch(entities: List<EntityRecord>) {
+        if (entities.isEmpty()) return
+        synchronized(lock) {
+            val conn = getConnection()
+            val wasAutoCommit = conn.autoCommit
+            conn.autoCommit = false
+            try {
+                val sql = """
+                    INSERT INTO entities (file_id, module_id, entity_type, name, qualified_name, parent_entity_id, language, visibility, signature, start_line, end_line, sha256, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """.trimIndent()
+                conn.prepareStatement(sql).use { ps ->
+                    for (e in entities) {
+                        ps.setInt(1, e.fileId)
+                        if (e.moduleId != null) ps.setInt(2, e.moduleId) else ps.setNull(2, java.sql.Types.INTEGER)
+                        ps.setString(3, e.entityType)
+                        ps.setString(4, e.name)
+                        ps.setString(5, e.qualifiedName)
+                        if (e.parentEntityId != null) ps.setInt(6, e.parentEntityId) else ps.setNull(6, java.sql.Types.INTEGER)
+                        ps.setString(7, e.language)
+                        ps.setString(8, e.visibility)
+                        ps.setString(9, e.signature)
+                        ps.setInt(10, e.startLine)
+                        ps.setInt(11, e.endLine)
+                        ps.setString(12, e.sha256)
+                        ps.setString(13, Instant.now().toString())
+                        ps.addBatch()
+                    }
+                    ps.executeBatch()
+                }
+                conn.commit()
+            } catch (e: Exception) {
+                conn.rollback()
+                throw e
+            } finally {
+                conn.autoCommit = wasAutoCommit
+            }
+        }
+    }
+
+    fun getEntitiesByFile(fileId: Int): List<EntityRecord> {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT * FROM entities WHERE file_id = ?").use { ps ->
+                ps.setInt(1, fileId)
+                ps.executeQuery().use { rs ->
+                    return rs.toEntityRecords()
+                }
+            }
+        }
+    }
+
+    fun getEntitiesByModule(moduleId: Int): List<EntityRecord> {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT * FROM entities WHERE module_id = ?").use { ps ->
+                ps.setInt(1, moduleId)
+                ps.executeQuery().use { rs ->
+                    return rs.toEntityRecords()
+                }
+            }
+        }
+    }
+
+    fun getEntitiesByType(entityType: String, limit: Int = 1000): List<EntityRecord> {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT * FROM entities WHERE entity_type = ? LIMIT ?").use { ps ->
+                ps.setString(1, entityType)
+                ps.setInt(2, limit)
+                ps.executeQuery().use { rs ->
+                    return rs.toEntityRecords()
+                }
+            }
+        }
+    }
+
+    fun getEntityByName(name: String): List<EntityRecord> {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT * FROM entities WHERE name = ?").use { ps ->
+                ps.setString(1, name)
+                ps.executeQuery().use { rs ->
+                    return rs.toEntityRecords()
+                }
+            }
+        }
+    }
+
+    fun getEntityByQualifiedName(qualifiedName: String): EntityRecord? {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT * FROM entities WHERE qualified_name = ?").use { ps ->
+                ps.setString(1, qualifiedName)
+                ps.executeQuery().use { rs ->
+                    return rs.toEntityRecords().firstOrNull()
+                }
+            }
+        }
+    }
+
+    fun getEntityById(id: Int): EntityRecord? {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT * FROM entities WHERE id = ?").use { ps ->
+                ps.setInt(1, id)
+                ps.executeQuery().use { rs ->
+                    return rs.toEntityRecords().firstOrNull()
+                }
+            }
+        }
+    }
+
+    fun searchEntities(query: String, limit: Int = 50): List<EntityRecord> {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT * FROM entities WHERE name LIKE ? OR qualified_name LIKE ? LIMIT ?").use { ps ->
+                ps.setString(1, "%$query%")
+                ps.setString(2, "%$query%")
+                ps.setInt(3, limit)
+                ps.executeQuery().use { rs ->
+                    return rs.toEntityRecords()
+                }
+            }
+        }
+    }
+
+    fun deleteEntitiesByFile(fileId: Int) {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("DELETE FROM entities WHERE file_id = ?").use { ps ->
+                ps.setInt(1, fileId)
+                ps.executeUpdate()
+            }
+        }
+    }
+
+    fun getEntityCount(): Int {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(*) FROM entities").use { rs ->
+                    return if (rs.next()) rs.getInt(1) else 0
+                }
+            }
+        }
+    }
+
+    // ── Relationship CRUD ────────────────────────────────────────
+
+    fun insertRelationship(
+        sourceEntityId: Int,
+        targetEntityId: Int?,
+        targetName: String,
+        relationship: String,
+        confidence: Double = 1.0,
+        sourceLine: Int?
+    ): Int {
+        synchronized(lock) {
+            val conn = getConnection()
+            val sql = """
+                INSERT INTO entity_relationships (source_entity_id, target_entity_id, target_name, relationship, confidence, source_line, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """.trimIndent()
+            conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS).use { ps ->
+                ps.setInt(1, sourceEntityId)
+                if (targetEntityId != null) ps.setInt(2, targetEntityId) else ps.setNull(2, java.sql.Types.INTEGER)
+                ps.setString(3, targetName)
+                ps.setString(4, relationship)
+                ps.setDouble(5, confidence)
+                if (sourceLine != null) ps.setInt(6, sourceLine) else ps.setNull(6, java.sql.Types.INTEGER)
+                ps.setString(7, Instant.now().toString())
+                ps.executeUpdate()
+                ps.generatedKeys.use { rs ->
+                    return if (rs.next()) rs.getInt(1) else -1
+                }
+            }
+        }
+    }
+
+    fun insertRelationshipsBatch(relationships: List<EntityRelationshipRecord>) {
+        if (relationships.isEmpty()) return
+        synchronized(lock) {
+            val conn = getConnection()
+            val wasAutoCommit = conn.autoCommit
+            conn.autoCommit = false
+            try {
+                val sql = """
+                    INSERT INTO entity_relationships (source_entity_id, target_entity_id, target_name, relationship, confidence, source_line, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """.trimIndent()
+                conn.prepareStatement(sql).use { ps ->
+                    for (r in relationships) {
+                        ps.setInt(1, r.sourceEntityId)
+                        if (r.targetEntityId != null) ps.setInt(2, r.targetEntityId) else ps.setNull(2, java.sql.Types.INTEGER)
+                        ps.setString(3, r.targetName)
+                        ps.setString(4, r.relationship)
+                        ps.setDouble(5, r.confidence)
+                        if (r.sourceLine != null) ps.setInt(6, r.sourceLine) else ps.setNull(6, java.sql.Types.INTEGER)
+                        ps.setString(7, Instant.now().toString())
+                        ps.addBatch()
+                    }
+                    ps.executeBatch()
+                }
+                conn.commit()
+            } catch (e: Exception) {
+                conn.rollback()
+                throw e
+            } finally {
+                conn.autoCommit = wasAutoCommit
+            }
+        }
+    }
+
+    fun getRelationshipsBySource(entityId: Int): List<EntityRelationshipRecord> {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT * FROM entity_relationships WHERE source_entity_id = ?").use { ps ->
+                ps.setInt(1, entityId)
+                ps.executeQuery().use { rs ->
+                    return rs.toRelationshipRecords()
+                }
+            }
+        }
+    }
+
+    fun getRelationshipsByTarget(entityId: Int): List<EntityRelationshipRecord> {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT * FROM entity_relationships WHERE target_entity_id = ?").use { ps ->
+                ps.setInt(1, entityId)
+                ps.executeQuery().use { rs ->
+                    return rs.toRelationshipRecords()
+                }
+            }
+        }
+    }
+
+    fun getRelationshipsByType(relationship: String, limit: Int = 1000): List<EntityRelationshipRecord> {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT * FROM entity_relationships WHERE relationship = ? LIMIT ?").use { ps ->
+                ps.setString(1, relationship)
+                ps.setInt(2, limit)
+                ps.executeQuery().use { rs ->
+                    return rs.toRelationshipRecords()
+                }
+            }
+        }
+    }
+
+    fun deleteRelationshipsByEntity(entityId: Int) {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("DELETE FROM entity_relationships WHERE source_entity_id = ? OR target_entity_id = ?").use { ps ->
+                ps.setInt(1, entityId)
+                ps.setInt(2, entityId)
+                ps.executeUpdate()
+            }
+        }
+    }
+
+    fun getRelationshipCount(): Int {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(*) FROM entity_relationships").use { rs ->
+                    return if (rs.next()) rs.getInt(1) else 0
+                }
+            }
+        }
+    }
+
+    fun resolveRelationshipTargets() {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.createStatement().use { stmt ->
+                stmt.executeUpdate("""
+                    UPDATE entity_relationships SET target_entity_id = (
+                        SELECT id FROM entities WHERE name = entity_relationships.target_name
+                        OR qualified_name = entity_relationships.target_name LIMIT 1
+                    ) WHERE target_entity_id IS NULL
+                """.trimIndent())
+            }
+        }
+    }
+
+    // ── Line Index CRUD ──────────────────────────────────────────
+
+    fun insertLineIndexBatch(entries: List<LineIndexRecord>) {
+        if (entries.isEmpty()) return
+        synchronized(lock) {
+            val conn = getConnection()
+            val wasAutoCommit = conn.autoCommit
+            conn.autoCommit = false
+            try {
+                val sql = """
+                    INSERT OR REPLACE INTO line_index (file_id, line_num, entity_id, line_type)
+                    VALUES (?, ?, ?, ?)
+                """.trimIndent()
+                conn.prepareStatement(sql).use { ps ->
+                    for (e in entries) {
+                        ps.setInt(1, e.fileId)
+                        ps.setInt(2, e.lineNum)
+                        if (e.entityId != null) ps.setInt(3, e.entityId) else ps.setNull(3, java.sql.Types.INTEGER)
+                        ps.setString(4, e.lineType)
+                        ps.addBatch()
+                    }
+                    ps.executeBatch()
+                }
+                conn.commit()
+            } catch (e: Exception) {
+                conn.rollback()
+                throw e
+            } finally {
+                conn.autoCommit = wasAutoCommit
+            }
+        }
+    }
+
+    fun getLineIndex(fileId: Int, lineNum: Int): LineIndexRecord? {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT * FROM line_index WHERE file_id = ? AND line_num = ?").use { ps ->
+                ps.setInt(1, fileId)
+                ps.setInt(2, lineNum)
+                ps.executeQuery().use { rs ->
+                    return rs.toLineIndexRecords().firstOrNull()
+                }
+            }
+        }
+    }
+
+    fun getLineIndexByFile(fileId: Int): List<LineIndexRecord> {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT * FROM line_index WHERE file_id = ? ORDER BY line_num").use { ps ->
+                ps.setInt(1, fileId)
+                ps.executeQuery().use { rs ->
+                    return rs.toLineIndexRecords()
+                }
+            }
+        }
+    }
+
+    fun getLinesByEntity(entityId: Int): List<LineIndexRecord> {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT * FROM line_index WHERE entity_id = ? ORDER BY file_id, line_num").use { ps ->
+                ps.setInt(1, entityId)
+                ps.executeQuery().use { rs ->
+                    return rs.toLineIndexRecords()
+                }
+            }
+        }
+    }
+
+    fun deleteLineIndexByFile(fileId: Int) {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("DELETE FROM line_index WHERE file_id = ?").use { ps ->
+                ps.setInt(1, fileId)
+                ps.executeUpdate()
+            }
+        }
+    }
+
+    fun getLineIndexCount(): Int {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(*) FROM line_index").use { rs ->
+                    return if (rs.next()) rs.getInt(1) else 0
+                }
+            }
+        }
+    }
+
+    // ── Dependency Graph CRUD ────────────────────────────────────
+
+    fun insertDependencyEdge(
+        sourceModuleId: Int?,
+        targetModuleId: Int?,
+        sourcePath: String,
+        targetPath: String,
+        depType: String,
+        weight: Int = 1
+    ): Int {
+        synchronized(lock) {
+            val conn = getConnection()
+            val sql = """
+                INSERT INTO dependency_graph (source_module_id, target_module_id, source_path, target_path, dep_type, weight, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """.trimIndent()
+            conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS).use { ps ->
+                if (sourceModuleId != null) ps.setInt(1, sourceModuleId) else ps.setNull(1, java.sql.Types.INTEGER)
+                if (targetModuleId != null) ps.setInt(2, targetModuleId) else ps.setNull(2, java.sql.Types.INTEGER)
+                ps.setString(3, sourcePath)
+                ps.setString(4, targetPath)
+                ps.setString(5, depType)
+                ps.setInt(6, weight)
+                ps.setString(7, Instant.now().toString())
+                ps.executeUpdate()
+                ps.generatedKeys.use { rs ->
+                    return if (rs.next()) rs.getInt(1) else -1
+                }
+            }
+        }
+    }
+
+    fun getDependenciesByModule(moduleId: Int): List<DependencyEdge> {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT * FROM dependency_graph WHERE source_module_id = ?").use { ps ->
+                ps.setInt(1, moduleId)
+                ps.executeQuery().use { rs ->
+                    return rs.toDependencyEdges()
+                }
+            }
+        }
+    }
+
+    fun getDependentsByModule(moduleId: Int): List<DependencyEdge> {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT * FROM dependency_graph WHERE target_module_id = ?").use { ps ->
+                ps.setInt(1, moduleId)
+                ps.executeQuery().use { rs ->
+                    return rs.toDependencyEdges()
+                }
+            }
+        }
+    }
+
+    fun clearDependencyGraph() {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.createStatement().use { stmt ->
+                stmt.execute("DELETE FROM dependency_graph")
+            }
+        }
+    }
+
+    fun getDependencyEdgeCount(): Int {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(*) FROM dependency_graph").use { rs ->
+                    return if (rs.next()) rs.getInt(1) else 0
+                }
+            }
+        }
+    }
+
+    // ── File Classification CRUD ─────────────────────────────────
+
+    fun insertFileClassification(
+        fileId: Int,
+        primaryClass: String,
+        secondaryClass: String?,
+        frameworkHint: String?,
+        entryPoint: Boolean = false,
+        generated: Boolean = false
+    ): Int {
+        synchronized(lock) {
+            val conn = getConnection()
+            val sql = """
+                INSERT OR REPLACE INTO file_classifications (file_id, primary_class, secondary_class, framework_hint, entry_point, generated, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """.trimIndent()
+            conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS).use { ps ->
+                ps.setInt(1, fileId)
+                ps.setString(2, primaryClass)
+                ps.setString(3, secondaryClass)
+                ps.setString(4, frameworkHint)
+                ps.setInt(5, if (entryPoint) 1 else 0)
+                ps.setInt(6, if (generated) 1 else 0)
+                ps.setString(7, Instant.now().toString())
+                ps.executeUpdate()
+                ps.generatedKeys.use { rs ->
+                    return if (rs.next()) rs.getInt(1) else -1
+                }
+            }
+        }
+    }
+
+    fun insertFileClassificationsBatch(classifications: List<FileClassification>) {
+        if (classifications.isEmpty()) return
+        synchronized(lock) {
+            val conn = getConnection()
+            val wasAutoCommit = conn.autoCommit
+            conn.autoCommit = false
+            try {
+                val sql = """
+                    INSERT OR REPLACE INTO file_classifications (file_id, primary_class, secondary_class, framework_hint, entry_point, generated, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """.trimIndent()
+                conn.prepareStatement(sql).use { ps ->
+                    for (c in classifications) {
+                        ps.setInt(1, c.fileId)
+                        ps.setString(2, c.primaryClass)
+                        ps.setString(3, c.secondaryClass)
+                        ps.setString(4, c.frameworkHint)
+                        ps.setInt(5, if (c.entryPoint) 1 else 0)
+                        ps.setInt(6, if (c.generated) 1 else 0)
+                        ps.setString(7, Instant.now().toString())
+                        ps.addBatch()
+                    }
+                    ps.executeBatch()
+                }
+                conn.commit()
+            } catch (e: Exception) {
+                conn.rollback()
+                throw e
+            } finally {
+                conn.autoCommit = wasAutoCommit
+            }
+        }
+    }
+
+    fun getFilesByClassification(primaryClass: String): List<FileRecord> {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("""
+                SELECT f.* FROM files f
+                JOIN file_classifications fc ON f.id = fc.file_id
+                WHERE fc.primary_class = ?
+            """.trimIndent()).use { ps ->
+                ps.setString(1, primaryClass)
+                ps.executeQuery().use { rs ->
+                    return rs.toFileRecords()
+                }
+            }
+        }
+    }
+
+    fun getClassificationOverview(): Map<String, Int> {
+        synchronized(lock) {
+            val conn = getConnection()
+            val result = mutableMapOf<String, Int>()
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT primary_class, COUNT(*) as cnt FROM file_classifications GROUP BY primary_class ORDER BY cnt DESC").use { rs ->
+                    while (rs.next()) {
+                        result[rs.getString("primary_class")] = rs.getInt("cnt")
+                    }
+                }
+            }
+            return result
+        }
+    }
+
+    fun deleteClassificationByFile(fileId: Int) {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("DELETE FROM file_classifications WHERE file_id = ?").use { ps ->
+                ps.setInt(1, fileId)
+                ps.executeUpdate()
+            }
+        }
+    }
+
+    // ── Index Metadata CRUD ──────────────────────────────────────
+
+    fun insertIndexMetadata(indexType: String, status: String, trigger: String): Int {
+        synchronized(lock) {
+            val conn = getConnection()
+            val sql = """
+                INSERT INTO index_metadata (index_type, status, started_at, trigger_type)
+                VALUES (?, ?, ?, ?)
+            """.trimIndent()
+            conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS).use { ps ->
+                ps.setString(1, indexType)
+                ps.setString(2, status)
+                ps.setString(3, Instant.now().toString())
+                ps.setString(4, trigger)
+                ps.executeUpdate()
+                ps.generatedKeys.use { rs ->
+                    return if (rs.next()) rs.getInt(1) else -1
+                }
+            }
+        }
+    }
+
+    fun updateIndexMetadata(
+        id: Int,
+        status: String,
+        completedAt: String? = null,
+        durationMs: Long? = null,
+        filesProcessed: Int? = null,
+        entitiesFound: Int? = null,
+        relationshipsFound: Int? = null,
+        errors: String? = null
+    ) {
+        synchronized(lock) {
+            val conn = getConnection()
+            val sql = """
+                UPDATE index_metadata SET status = ?, completed_at = ?, duration_ms = ?,
+                files_processed = ?, entities_found = ?, relationships_found = ?, errors = ?
+                WHERE id = ?
+            """.trimIndent()
+            conn.prepareStatement(sql).use { ps ->
+                ps.setString(1, status)
+                ps.setString(2, completedAt)
+                if (durationMs != null) ps.setLong(3, durationMs) else ps.setNull(3, java.sql.Types.INTEGER)
+                if (filesProcessed != null) ps.setInt(4, filesProcessed) else ps.setNull(4, java.sql.Types.INTEGER)
+                if (entitiesFound != null) ps.setInt(5, entitiesFound) else ps.setNull(5, java.sql.Types.INTEGER)
+                if (relationshipsFound != null) ps.setInt(6, relationshipsFound) else ps.setNull(6, java.sql.Types.INTEGER)
+                ps.setString(7, errors)
+                ps.setInt(8, id)
+                ps.executeUpdate()
+            }
+        }
+    }
+
+    fun getLatestIndexMetadata(indexType: String): IndexMetadataRecord? {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.prepareStatement("SELECT * FROM index_metadata WHERE index_type = ? ORDER BY id DESC LIMIT 1").use { ps ->
+                ps.setString(1, indexType)
+                ps.executeQuery().use { rs ->
+                    return rs.toIndexMetadataRecords().firstOrNull()
+                }
+            }
+        }
+    }
+
+    fun getIndexStats(): Map<String, Any> {
+        synchronized(lock) {
+            val conn = getConnection()
+            val stats = mutableMapOf<String, Any>()
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(*) FROM entities").use { rs ->
+                    if (rs.next()) stats["entity_count"] = rs.getInt(1)
+                }
+            }
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(*) FROM entity_relationships").use { rs ->
+                    if (rs.next()) stats["relationship_count"] = rs.getInt(1)
+                }
+            }
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(*) FROM line_index").use { rs ->
+                    if (rs.next()) stats["line_index_count"] = rs.getInt(1)
+                }
+            }
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(*) FROM dependency_graph").use { rs ->
+                    if (rs.next()) stats["dependency_edge_count"] = rs.getInt(1)
+                }
+            }
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(*) FROM file_classifications").use { rs ->
+                    if (rs.next()) stats["classification_count"] = rs.getInt(1)
+                }
+            }
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(DISTINCT entity_type) FROM entities").use { rs ->
+                    if (rs.next()) stats["distinct_entity_types"] = rs.getInt(1)
+                }
+            }
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(DISTINCT relationship) FROM entity_relationships").use { rs ->
+                    if (rs.next()) stats["distinct_relationship_types"] = rs.getInt(1)
+                }
+            }
+            return stats
+        }
+    }
+
+    // ── Project Index ResultSet mapping helpers ───────────────────
+
+    private fun ResultSet.toEntityRecords(): List<EntityRecord> {
+        val records = mutableListOf<EntityRecord>()
+        while (next()) {
+            records.add(
+                EntityRecord(
+                    id = getInt("id"),
+                    fileId = getInt("file_id"),
+                    moduleId = getInt("module_id").let { if (wasNull()) null else it },
+                    entityType = getString("entity_type"),
+                    name = getString("name"),
+                    qualifiedName = getString("qualified_name"),
+                    parentEntityId = getInt("parent_entity_id").let { if (wasNull()) null else it },
+                    language = getString("language"),
+                    visibility = getString("visibility"),
+                    signature = getString("signature"),
+                    startLine = getInt("start_line"),
+                    endLine = getInt("end_line"),
+                    sha256 = getString("sha256")
+                )
+            )
+        }
+        return records
+    }
+
+    private fun ResultSet.toRelationshipRecords(): List<EntityRelationshipRecord> {
+        val records = mutableListOf<EntityRelationshipRecord>()
+        while (next()) {
+            records.add(
+                EntityRelationshipRecord(
+                    id = getInt("id"),
+                    sourceEntityId = getInt("source_entity_id"),
+                    targetEntityId = getInt("target_entity_id").let { if (wasNull()) null else it },
+                    targetName = getString("target_name"),
+                    relationship = getString("relationship"),
+                    confidence = getDouble("confidence"),
+                    sourceLine = getInt("source_line").let { if (wasNull()) null else it }
+                )
+            )
+        }
+        return records
+    }
+
+    private fun ResultSet.toLineIndexRecords(): List<LineIndexRecord> {
+        val records = mutableListOf<LineIndexRecord>()
+        while (next()) {
+            records.add(
+                LineIndexRecord(
+                    id = getInt("id"),
+                    fileId = getInt("file_id"),
+                    lineNum = getInt("line_num"),
+                    entityId = getInt("entity_id").let { if (wasNull()) null else it },
+                    lineType = getString("line_type")
+                )
+            )
+        }
+        return records
+    }
+
+    private fun ResultSet.toDependencyEdges(): List<DependencyEdge> {
+        val records = mutableListOf<DependencyEdge>()
+        while (next()) {
+            records.add(
+                DependencyEdge(
+                    id = getInt("id"),
+                    sourceModuleId = getInt("source_module_id").let { if (wasNull()) null else it },
+                    targetModuleId = getInt("target_module_id").let { if (wasNull()) null else it },
+                    sourcePath = getString("source_path"),
+                    targetPath = getString("target_path"),
+                    depType = getString("dep_type"),
+                    weight = getInt("weight")
+                )
+            )
+        }
+        return records
+    }
+
+    private fun ResultSet.toFileClassifications(): List<FileClassification> {
+        val records = mutableListOf<FileClassification>()
+        while (next()) {
+            records.add(
+                FileClassification(
+                    id = getInt("id"),
+                    fileId = getInt("file_id"),
+                    primaryClass = getString("primary_class"),
+                    secondaryClass = getString("secondary_class"),
+                    frameworkHint = getString("framework_hint"),
+                    entryPoint = getInt("entry_point") == 1,
+                    generated = getInt("generated") == 1
+                )
+            )
+        }
+        return records
+    }
+
+    private fun ResultSet.toIndexMetadataRecords(): List<IndexMetadataRecord> {
+        val records = mutableListOf<IndexMetadataRecord>()
+        while (next()) {
+            records.add(
+                IndexMetadataRecord(
+                    id = getInt("id"),
+                    indexType = getString("index_type"),
+                    status = getString("status"),
+                    startedAt = getString("started_at"),
+                    completedAt = getString("completed_at"),
+                    durationMs = getLong("duration_ms").let { if (wasNull()) null else it },
+                    filesProcessed = getInt("files_processed"),
+                    entitiesFound = getInt("entities_found"),
+                    relationshipsFound = getInt("relationships_found"),
+                    errors = getString("errors"),
+                    commitSha = getString("commit_sha"),
+                    trigger = getString("trigger_type")
+                )
+            )
+        }
+        return records
     }
 }

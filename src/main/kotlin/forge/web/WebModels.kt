@@ -214,3 +214,51 @@ data class DatasetExportResponse(
     val recordCount: Int = 0,
     val message: String = ""
 )
+
+// ── Index response models ─────────────────────────────────────────────────
+
+@Serializable
+data class IndexStatusResponse(
+    val indexed: Boolean = false,
+    val lastIndexedAt: String? = null,
+    val indexStatus: String = "not_built",
+    val totalEntities: Int = 0,
+    val totalRelationships: Int = 0,
+    val totalLinesIndexed: Int = 0,
+    val totalDependencyEdges: Int = 0,
+    val entitiesByType: Map<String, Int> = emptyMap(),
+    val relationshipsByType: Map<String, Int> = emptyMap(),
+    val filesByClassification: Map<String, Int> = emptyMap()
+)
+
+@Serializable
+data class EntityResponse(
+    val id: Int = 0,
+    val name: String = "",
+    val qualifiedName: String? = null,
+    val entityType: String = "",
+    val filePath: String? = null,
+    val startLine: Int = 0,
+    val endLine: Int = 0,
+    val visibility: String? = null,
+    val language: String? = null,
+    val signature: String? = null
+)
+
+@Serializable
+data class EntityDetailResponse(
+    val entity: EntityResponse = EntityResponse(),
+    val outgoing: List<RelationshipResponse> = emptyList(),
+    val incoming: List<RelationshipResponse> = emptyList()
+)
+
+@Serializable
+data class RelationshipResponse(
+    val sourceId: Int = 0,
+    val sourceName: String = "",
+    val targetId: Int? = null,
+    val targetName: String = "",
+    val relationship: String = "",
+    val confidence: Double = 1.0,
+    val sourceLine: Int? = null
+)

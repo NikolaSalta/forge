@@ -7,6 +7,7 @@ import forge.llm.ModelSelector
 import forge.llm.OllamaClient
 import forge.llm.PromptBuilder
 import forge.llm.ResponseParser
+import forge.index.ProjectIndexCoordinator
 import forge.retrieval.Chunker
 import forge.retrieval.EvidenceCollector
 import forge.retrieval.HierarchicalRetriever
@@ -32,6 +33,7 @@ enum class PipelineStageName(val displayName: String) {
     REPO_SCANNING("Repository Scanning"),
     MODULE_DISCOVERY("Module Discovery"),
     CHUNKING("Code Chunking"),
+    PROJECT_INDEXING("Project Indexing"),
     EMBEDDING("Embedding Generation"),
     EVIDENCE_COLLECTION("Evidence Collection"),
     CONTEXT_ASSEMBLY("Context Assembly"),
@@ -196,6 +198,28 @@ fun buildPipeline(taskType: TaskType): List<PipelineStage> {
                 overlapLines = ctx.config.workspace.chunkOverlapLines,
                 maxChunksPerFile = ctx.config.workspace.maxChunksPerFile
             )
+        }
+    })
+
+    // ── Stage 2b: PROJECT_INDEXING ───────────────────────────────────────
+    // Builds the absolute project index: entities, relationships, line index,
+    // dependency graph, and file classifications.
+    stages.add(PipelineStage(
+        name = "PROJECT_INDEXING",
+        description = "Building absolute project index"
+    ) { ctx ->
+        ctx.stateManager.checkPauseOrStop()
+
+        val coordinator = ProjectIndexCoordinator(ctx.db, ctx.repoPath, ctx.config)
+        if (!coordinator.isIndexBuilt()) {
+            coordinator.buildFullIndex { phase, detail ->
+                // Progress is logged but not surfaced to trace yet
+            }
+        } else if (ctx.config.scale.incrementalScan) {
+            val (changed, deleted) = coordinator.detectChangedFiles()
+            if (changed.isNotEmpty() || deleted.isNotEmpty()) {
+                coordinator.updateIncremental(changed, deleted)
+            }
         }
     })
 
