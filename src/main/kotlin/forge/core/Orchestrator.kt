@@ -249,7 +249,7 @@ class Orchestrator(
         // Determine if this is a deep analysis task vs a transformation/planning task
         // Transformation prompts should NOT use per-module deep analysis — they need
         // whole-repo reasoning with the user's instruction as primary input.
-        val isTransformationPrompt = isTransformationRequest(userInput)
+        val isTransformationPrompt = isTransformationRequest(userInput) || intent.taskType == TaskType.REPO_PLATFORM_TRANSFORMATION
         val isDeepAnalysis = !isTransformationPrompt && intent.taskType in setOf(
             TaskType.REPO_ANALYSIS,
             TaskType.PROJECT_OVERVIEW,
@@ -267,11 +267,15 @@ class Orchestrator(
                     if (stage.name == "LLM_CALL" && isDeepAnalysis) {
                         // ── Deep multi-pass analysis (module-by-module) ─────
                         executeDeepAnalysis(context, traceChannel, forceReanalyze)
-                    } else if (stage.name == "LLM_CALL" && isTransformationPrompt) {
-                        // ── Synthesis mode: use heavy SYNTHESIZE model ──────
-                        // Transformation/architecture tasks get gpt-oss:20b
-                        context.selectedModel = modelSelector.selectForRole(ModelRole.SYNTHESIZE)
-                        executeStreamingLlmCall(context, traceChannel)
+                    } else if (stage.name == "LLM_CALL" && (isTransformationPrompt || intent.taskType == TaskType.REPO_PLATFORM_TRANSFORMATION)) {
+                        // ── Transformation pipeline: cluster → compress → synthesize → validate
+                        val transformPipeline = TransformationPipeline(config, ollamaClient, db, repoPath)
+                        val result = transformPipeline.execute(userInput) { stageName, detail ->
+                            traceChannel.trySend(TraceEvent.stageStarted(stageName, idx + 2, totalStages + 2, detail))
+                        }
+                        context.selectedModel = config.models.synthesize
+                        context.llmResponse = result.response
+                        traceChannel.send(TraceEvent.modelSelected(config.models.synthesize))
                     } else if (stage.name == "LLM_CALL") {
                         // ── Standard streaming LLM call ─────────────────────
                         executeStreamingLlmCall(context, traceChannel)

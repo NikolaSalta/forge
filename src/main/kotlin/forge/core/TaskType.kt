@@ -136,6 +136,12 @@ enum class TaskType(
         generatesCode = true,
         requiresDeepAnalysis = true,
         modelRole = ModelRole.CODE
+    ),
+    REPO_PLATFORM_TRANSFORMATION(
+        "Repository Platform Transformation",
+        "Transform a repository of examples/projects into a unified platform with modular architecture",
+        requiresDeepAnalysis = true,
+        modelRole = ModelRole.SYNTHESIZE
     );
 
     companion object {

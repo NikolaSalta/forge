@@ -34,7 +34,8 @@ data class WorkspaceInfo(
 @Serializable
 private data class WorkspaceMeta(
     val repoPath: String,
-    val createdAt: String
+    val createdAt: String,
+    val repoFingerprint: String = ""
 )
 
 // ──────────────────────────────────────────────────────────────
@@ -149,10 +150,49 @@ class WorkspaceManager(private val config: ForgeConfig) {
 
     // ── Helpers ──────────────────────────────────────────────
 
+    /**
+     * Computes a fingerprint for the repo based on its path and top-level directory listing.
+     * Used to verify that workspace index matches the current repo state.
+     */
+    fun computeRepoFingerprint(repoPath: Path): String {
+        val normalized = repoPath.toAbsolutePath().normalize()
+        val topItems = try {
+            Files.list(normalized).use { stream ->
+                stream.map { it.fileName.toString() }
+                    .sorted()
+                    .toList()
+                    .joinToString(",")
+            }
+        } catch (_: Exception) { "" }
+        return sha256Hex("${normalized}|${topItems}").take(16)
+    }
+
+    /**
+     * Verifies that the workspace's stored fingerprint matches the current repo.
+     * Returns true if they match or if no fingerprint was stored (backward compatibility).
+     */
+    fun verifyFingerprint(repoPath: Path): Boolean {
+        val normalizedRepo = repoPath.toAbsolutePath().normalize()
+        val workspacePath = getWorkspacePath(normalizedRepo)
+        val metaFile = workspacePath.resolve("meta.json")
+        if (!Files.exists(metaFile)) return false
+
+        val meta = try {
+            json.decodeFromString<WorkspaceMeta>(Files.readString(metaFile))
+        } catch (_: Exception) { return false }
+
+        // Backward compatibility: if no fingerprint stored, allow
+        if (meta.repoFingerprint.isBlank()) return true
+
+        val currentFingerprint = computeRepoFingerprint(normalizedRepo)
+        return meta.repoFingerprint == currentFingerprint
+    }
+
     private fun writeMetaJson(workspacePath: Path, repoPath: Path) {
         val meta = WorkspaceMeta(
             repoPath = repoPath.toString(),
-            createdAt = Instant.now().toString()
+            createdAt = Instant.now().toString(),
+            repoFingerprint = computeRepoFingerprint(repoPath)
         )
         Files.writeString(workspacePath.resolve("meta.json"), json.encodeToString(meta))
     }
