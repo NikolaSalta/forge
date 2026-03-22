@@ -137,6 +137,37 @@ data class ErrorResponse(
     val error: String
 )
 
+// ── Plan mode models ────────────────────────────────────────────────────────
+
+@Serializable
+data class PlanGenerateRequest(
+    val query: String
+)
+
+@Serializable
+data class PlanRefineRequest(
+    val planId: String,
+    val feedback: String
+)
+
+@Serializable
+data class PlanApproveRequest(
+    val planId: String
+)
+
+@Serializable
+data class PlanExecuteRequest(
+    val planId: String
+)
+
+@Serializable
+data class PlanResponse(
+    val planId: String,
+    val phase: String,
+    val plan: String,
+    val revisions: Int = 0
+)
+
 @Serializable
 data class SuccessResponse(
     val message: String

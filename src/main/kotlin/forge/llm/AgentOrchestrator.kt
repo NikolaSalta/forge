@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory
  *
  * Agent architecture:
  *   Agent 1 (Classifier) → qwen3:1.7b          → Always hot
- *   Agent 2 (Reasoner)   → deepseek-r1:8b       → Always hot
+ *   Agent 2 (Reasoner)   → qwen2.5:14b          → Always hot
  *   Agent 3 (Specialist)  → on-demand, one of:
  *       CODE      → qwen2.5-coder:14b  (~9 GB, heavy)
  *       EMBED     → qwen3-embedding:0.6b (~0.5 GB, light)
@@ -91,7 +91,7 @@ class AgentOrchestrator(
 
         // If we had to unload the reasoner, reload it
         if (reasonerUnloaded) {
-            val reasoner = config.alwaysHot.getOrNull(1) // deepseek-r1:8b
+            val reasoner = config.alwaysHot.getOrNull(1) // qwen2.5:14b
             if (reasoner != null) {
                 log.info("Restoring always-hot reasoner: {}", reasoner)
                 client.preloadModel(reasoner, config.keepAliveMinutes)
@@ -114,7 +114,7 @@ class AgentOrchestrator(
                 AgentInfo("Classifier", config.alwaysHot.getOrElse(0) { "qwen3:1.7b" },
                     "CLASSIFY", isHot = true,
                     isLoaded = loaded.any { matchesModel(it.name, config.alwaysHot.getOrElse(0) { "" }) }),
-                AgentInfo("Reasoner", config.alwaysHot.getOrElse(1) { "deepseek-r1:8b" },
+                AgentInfo("Reasoner", config.alwaysHot.getOrElse(1) { "qwen2.5:14b" },
                     "REASON", isHot = true,
                     isLoaded = loaded.any { matchesModel(it.name, config.alwaysHot.getOrElse(1) { "" }) }),
                 AgentInfo("Specialist", activeSpecialist ?: "(idle)",

@@ -124,7 +124,8 @@ data class EntityRecord(
     val signature: String?,
     val startLine: Int,
     val endLine: Int,
-    val sha256: String?
+    val sha256: String?,
+    val filePath: String? = null
 )
 
 data class EntityRelationshipRecord(
@@ -1999,11 +2000,17 @@ class Database(workspacePath: Path) {
     fun getEntitiesByType(entityType: String, limit: Int = 1000): List<EntityRecord> {
         synchronized(lock) {
             val conn = getConnection()
-            conn.prepareStatement("SELECT * FROM entities WHERE entity_type = ? LIMIT ?").use { ps ->
+            conn.prepareStatement("""
+                SELECT e.*, f.relative_path AS file_path
+                FROM entities e
+                LEFT JOIN files f ON e.file_id = f.id
+                WHERE e.entity_type = ?
+                LIMIT ?
+            """.trimIndent()).use { ps ->
                 ps.setString(1, entityType)
                 ps.setInt(2, limit)
                 ps.executeQuery().use { rs ->
-                    return rs.toEntityRecords()
+                    return rs.toEntityRecordsWithPath()
                 }
             }
         }
@@ -2048,13 +2055,35 @@ class Database(workspacePath: Path) {
     fun searchEntities(query: String, limit: Int = 50): List<EntityRecord> {
         synchronized(lock) {
             val conn = getConnection()
-            conn.prepareStatement("SELECT * FROM entities WHERE name LIKE ? OR qualified_name LIKE ? LIMIT ?").use { ps ->
+            conn.prepareStatement("""
+                SELECT e.*, f.relative_path AS file_path
+                FROM entities e
+                LEFT JOIN files f ON e.file_id = f.id
+                WHERE e.name LIKE ? OR e.qualified_name LIKE ?
+                LIMIT ?
+            """.trimIndent()).use { ps ->
                 ps.setString(1, "%$query%")
                 ps.setString(2, "%$query%")
                 ps.setInt(3, limit)
                 ps.executeQuery().use { rs ->
-                    return rs.toEntityRecords()
+                    return rs.toEntityRecordsWithPath()
                 }
+            }
+        }
+    }
+
+    /**
+     * Clears all index data (entities, relationships, line_index, dependency_graph)
+     * before a full re-index to prevent orphaned records from stale file IDs.
+     */
+    fun clearAllIndexData() {
+        synchronized(lock) {
+            val conn = getConnection()
+            conn.createStatement().use { stmt ->
+                stmt.executeUpdate("DELETE FROM entity_relationships")
+                stmt.executeUpdate("DELETE FROM entities")
+                stmt.executeUpdate("DELETE FROM line_index")
+                stmt.executeUpdate("DELETE FROM dependency_graph")
             }
         }
     }
@@ -2681,6 +2710,31 @@ class Database(workspacePath: Path) {
                     startLine = getInt("start_line"),
                     endLine = getInt("end_line"),
                     sha256 = getString("sha256")
+                )
+            )
+        }
+        return records
+    }
+
+    private fun ResultSet.toEntityRecordsWithPath(): List<EntityRecord> {
+        val records = mutableListOf<EntityRecord>()
+        while (next()) {
+            records.add(
+                EntityRecord(
+                    id = getInt("id"),
+                    fileId = getInt("file_id"),
+                    moduleId = getInt("module_id").let { if (wasNull()) null else it },
+                    entityType = getString("entity_type"),
+                    name = getString("name"),
+                    qualifiedName = getString("qualified_name"),
+                    parentEntityId = getInt("parent_entity_id").let { if (wasNull()) null else it },
+                    language = getString("language"),
+                    visibility = getString("visibility"),
+                    signature = getString("signature"),
+                    startLine = getInt("start_line"),
+                    endLine = getInt("end_line"),
+                    sha256 = getString("sha256"),
+                    filePath = try { getString("file_path") } catch (_: Exception) { null }
                 )
             )
         }

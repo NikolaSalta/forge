@@ -14,11 +14,11 @@ data class OllamaConfig(
 
 data class ModelsConfig(
     val classify: String = "qwen3:1.7b",
-    val reason: String = "deepseek-r1:8b",
-    val code: String = "qwen2.5-coder:14b",
+    val reason: String = "qwen2.5:14b",
+    val code: String = "qwen2.5-coder:7b",
     val embed: String = "qwen3-embedding:0.6b",
-    val summarize: String = "qwen2.5:14b",
-    val vision: String = "qwen2.5vl:7b",
+    val summarize: String = "ministral-3:3b",
+    val vision: String = "qwen3-vl:2b",
     val fallback: FallbackModels = FallbackModels()
 )
 
@@ -38,8 +38,8 @@ data class WorkspaceConfig(
 )
 
 data class RetrievalConfig(
-    val maxContextChunks: Int = 50,
-    val similarityThreshold: Float = 0.50f,
+    val maxContextChunks: Int = 150,
+    val similarityThreshold: Float = 0.25f,
     val embeddingBatchSize: Int = 10,
     val scanIgnore: List<String> = listOf(
         "node_modules", ".git", "__pycache__", "build", "dist",
@@ -110,7 +110,7 @@ data class EvolutionConfig(
 
 data class AgentOrchestrationConfig(
     val enabled: Boolean = true,
-    val alwaysHot: List<String> = listOf("qwen3:1.7b", "deepseek-r1:8b"),
+    val alwaysHot: List<String> = listOf("qwen3:1.7b", "qwen2.5:14b"),
     val specialistModels: Map<String, String> = mapOf(
         "CODE" to "qwen2.5-coder:14b",
         "EMBED" to "qwen3-embedding:0.6b",
@@ -225,11 +225,11 @@ data class ForgeConfig(
                 ),
                 models = ModelsConfig(
                     classify = modelsMap["classify"] as? String ?: "qwen3:1.7b",
-                    reason = modelsMap["reason"] as? String ?: "deepseek-r1:8b",
-                    code = modelsMap["code"] as? String ?: "qwen2.5-coder:14b",
-                    embed = modelsMap["embed"] as? String ?: "nomic-embed-text",
-                    summarize = modelsMap["summarize"] as? String ?: "ministral-3:8b",
-                    vision = modelsMap["vision"] as? String ?: "qwen2.5vl:7b",
+                    reason = modelsMap["reason"] as? String ?: "qwen2.5:14b",
+                    code = modelsMap["code"] as? String ?: "qwen2.5-coder:7b",
+                    embed = modelsMap["embed"] as? String ?: "qwen3-embedding:0.6b",
+                    summarize = modelsMap["summarize"] as? String ?: "ministral-3:3b",
+                    vision = modelsMap["vision"] as? String ?: "qwen3-vl:2b",
                     fallback = FallbackModels(
                         classify = fallbackMap["classify"] as? String ?: "deepseek-r1:1.5b",
                         reason = fallbackMap["reason"] as? String ?: "qwen2.5:14b",
@@ -245,8 +245,8 @@ data class ForgeConfig(
                     maxChunksPerFile = (workspaceMap["max_chunks_per_file"] as? Number)?.toInt() ?: 200_000
                 ),
                 retrieval = RetrievalConfig(
-                    maxContextChunks = (retrievalMap["max_context_chunks"] as? Number)?.toInt() ?: 50,
-                    similarityThreshold = (retrievalMap["similarity_threshold"] as? Number)?.toFloat() ?: 0.50f,
+                    maxContextChunks = (retrievalMap["max_context_chunks"] as? Number)?.toInt() ?: 150,
+                    similarityThreshold = (retrievalMap["similarity_threshold"] as? Number)?.toFloat() ?: 0.25f,
                     embeddingBatchSize = (retrievalMap["embedding_batch_size"] as? Number)?.toInt() ?: 10,
                     scanIgnore = (retrievalMap["scan_ignore"] as? List<*>)?.map { it.toString() }
                         ?: RetrievalConfig().scanIgnore
@@ -303,7 +303,7 @@ data class ForgeConfig(
                 agents = AgentOrchestrationConfig(
                     enabled = agentsMap["enabled"] as? Boolean ?: true,
                     alwaysHot = (agentsMap["always_hot"] as? List<*>)?.mapNotNull { it as? String }
-                        ?: listOf("qwen3:1.7b", "deepseek-r1:8b"),
+                        ?: listOf("qwen3:1.7b", "qwen2.5:14b"),
                     specialistModels = (agentsMap["specialist_models"] as? Map<*, *>)?.mapNotNull { (k, v) ->
                         val key = k as? String ?: return@mapNotNull null
                         val value = v as? String ?: return@mapNotNull null

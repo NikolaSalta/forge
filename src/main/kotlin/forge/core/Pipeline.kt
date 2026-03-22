@@ -293,8 +293,9 @@ fun buildPipeline(taskType: TaskType): List<PipelineStage> {
             scored.chunk.content
         }
 
-        // If modules exist, use hierarchical retrieval for better results
+        // If modules exist, try hierarchical retrieval for better results
         if (ctx.db.getModuleCount() > 0) {
+            val globalChunks = ctx.contextChunks // Save global results as fallback
             val retriever = HierarchicalRetriever(ctx.config, ctx.ollama, ctx.db)
             val result = if (ctx.focusModule != null) {
                 val chunks = retriever.searchInModule(
@@ -320,7 +321,19 @@ fun buildPipeline(taskType: TaskType): List<PipelineStage> {
                 focusModule = ctx.focusModule
             )
             ctx.moduleContext = assembled.moduleContext
-            ctx.contextChunks = assembled.codeChunks
+
+            // Use hierarchical results if sufficient, otherwise merge with global fallback
+            if (assembled.codeChunks.size >= 30) {
+                ctx.contextChunks = assembled.codeChunks
+            } else {
+                // Hierarchical returned too few — merge with global search results
+                val merged = assembled.codeChunks.toMutableList()
+                for (chunk in globalChunks) {
+                    if (chunk !in merged) merged.add(chunk)
+                    if (merged.size >= ctx.config.retrieval.maxContextChunks) break
+                }
+                ctx.contextChunks = merged
+            }
         }
 
         // Merge attached file contents into the file contents map
@@ -361,8 +374,7 @@ fun buildPipeline(taskType: TaskType): List<PipelineStage> {
                         appendLine("## Project Index: Matched Entities")
                         appendLine()
                         for (entity in matchedEntities) {
-                            val file = ctx.db.getFileById(entity.fileId)
-                            val loc = "${file?.relativePath ?: "?"}:${entity.startLine}-${entity.endLine}"
+                            val loc = "${entity.filePath ?: "?"}:${entity.startLine}-${entity.endLine}"
                             appendLine("- ${entity.entityType} `${entity.name}` ($loc)")
                             if (!entity.signature.isNullOrBlank() && entity.signature != entity.name) {
                                 appendLine("  signature: ${entity.signature!!.take(120)}")
@@ -383,8 +395,7 @@ fun buildPipeline(taskType: TaskType): List<PipelineStage> {
 
                 // Group by top-level module/package for architecture overview
                 fun extractModule(entity: forge.workspace.EntityRecord): String {
-                    val file = ctx.db.getFileById(entity.fileId)
-                    val path = file?.relativePath ?: "unknown"
+                    val path = entity.filePath ?: "unknown"
                     val parts = path.split("/")
                     // Use first 2-3 directory levels as module grouping
                     return when {
@@ -493,7 +504,8 @@ fun buildPipeline(taskType: TaskType): List<PipelineStage> {
             taskType = ctx.taskType,
             evidence = evidenceStrings,
             chunks = ctx.contextChunks,
-            fileContents = ctx.fileContents
+            fileContents = ctx.fileContents,
+            userInput = ctx.userInput
         )
 
         // Call the LLM

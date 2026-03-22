@@ -977,5 +977,164 @@ fun Routing.apiRoutes(
                 }
             }
         }
+
+        // ── Plan mode endpoints ─────────────────────────────────────────────
+
+        val planService = forge.core.PlanService(ollamaClient, config)
+
+        post("/plan/generate") {
+            val body = call.receive<PlanGenerateRequest>()
+            if (body.query.isBlank()) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Query is required"))
+                return@post
+            }
+
+            val db = webState.database
+            val repoSummary = if (db != null) {
+                val fileCount = db.getFileCount()
+                val modules = db.getModuleCount()
+                "Repository: ${webState.repoPath ?: "unknown"}, $fileCount files, $modules modules"
+            } else {
+                "Repository: ${webState.repoPath ?: "unknown"}"
+            }
+
+            try {
+                val plan = planService.generateSimplePlan(body.query, repoSummary)
+                call.respond(PlanResponse(
+                    planId = plan.id,
+                    phase = plan.phase.name,
+                    plan = plan.simplePlan,
+                    revisions = plan.revisions
+                ))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Plan generation failed: ${e.message}"))
+            }
+        }
+
+        post("/plan/refine") {
+            val body = call.receive<PlanRefineRequest>()
+            try {
+                val plan = planService.refinePlan(body.planId, body.feedback)
+                if (plan == null) {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Plan not found"))
+                    return@post
+                }
+                call.respond(PlanResponse(
+                    planId = plan.id,
+                    phase = plan.phase.name,
+                    plan = plan.simplePlan,
+                    revisions = plan.revisions
+                ))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Plan refinement failed: ${e.message}"))
+            }
+        }
+
+        post("/plan/approve") {
+            val body = call.receive<PlanApproveRequest>()
+            val plan = planService.getPlan(body.planId)
+            if (plan == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Plan not found"))
+                return@post
+            }
+
+            when (plan.phase) {
+                forge.core.PlanPhase.SIMPLE_PLAN -> {
+                    planService.approveSimplePlan(body.planId)
+                    // Generate implementation plan using index context
+                    val db = webState.database
+                    val indexContext = if (db != null) {
+                        val queryService = forge.index.IndexQueryService(db)
+                        val stats = queryService.getIndexStats()
+                        "Indexed: ${stats.totalEntities} entities, ${stats.totalRelationships} relationships across ${stats.filesByClassification.entries.joinToString { "${it.value} ${it.key}" }}"
+                    } else ""
+
+                    val updated = planService.generateImplementationPlan(body.planId, indexContext)
+                    if (updated != null) {
+                        call.respond(PlanResponse(
+                            planId = updated.id,
+                            phase = updated.phase.name,
+                            plan = updated.implementationPlan ?: "",
+                            revisions = updated.revisions
+                        ))
+                    } else {
+                        call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Failed to generate implementation plan"))
+                    }
+                }
+                forge.core.PlanPhase.IMPLEMENTATION_PLAN -> {
+                    planService.approveImplementationPlan(body.planId)
+                    call.respond(PlanResponse(
+                        planId = plan.id,
+                        phase = plan.phase.name,
+                        plan = plan.implementationPlan ?: "",
+                        revisions = plan.revisions
+                    ))
+                }
+                else -> {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("Plan is in phase ${plan.phase}, cannot approve"))
+                }
+            }
+        }
+
+        post("/plan/refine-impl") {
+            val body = call.receive<PlanRefineRequest>()
+            try {
+                val plan = planService.refineImplementationPlan(body.planId, body.feedback)
+                if (plan == null) {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Plan not found"))
+                    return@post
+                }
+                call.respond(PlanResponse(
+                    planId = plan.id,
+                    phase = plan.phase.name,
+                    plan = plan.implementationPlan ?: "",
+                    revisions = plan.revisions
+                ))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Implementation plan refinement failed: ${e.message}"))
+            }
+        }
+
+        post("/plan/execute") {
+            val body = call.receive<PlanExecuteRequest>()
+            val executionPrompt = planService.buildExecutionPrompt(body.planId)
+            if (executionPrompt == null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Plan not ready for execution"))
+                return@post
+            }
+
+            // Execute using the normal streaming pipeline but with the plan as the prompt
+            val repoPath = webState.repoPath?.let { java.nio.file.Path.of(it) }
+            if (repoPath == null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("No repository selected"))
+                return@post
+            }
+
+            val traceChannel = kotlinx.coroutines.channels.Channel<TraceEvent>(256)
+            val scope = CoroutineScope(Dispatchers.IO)
+            val job = scope.launch {
+                try {
+                    orchestrator.executeWithTrace(
+                        userInput = executionPrompt,
+                        repoPath = repoPath,
+                        traceChannel = traceChannel,
+                        focusModule = null,
+                        forceReanalyze = false
+                    )
+                } catch (e: Exception) {
+                    traceChannel.trySend(TraceEvent.error("PLAN_EXECUTE", e.message ?: "Execution failed"))
+                } finally {
+                    traceChannel.close()
+                }
+            }
+
+            call.respondTextWriter(contentType = io.ktor.http.ContentType.Text.EventStream) {
+                for (event in traceChannel) {
+                    write(event.toSSE())
+                    flush()
+                }
+                job.join()
+            }
+        }
     }
 }

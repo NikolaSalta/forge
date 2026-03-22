@@ -350,7 +350,8 @@ class Orchestrator(
             evidence = ctx.evidenceMap,
             workspacePath = ctx.workspace.path,
             traceChannel = traceChannel,
-            clearCache = forceReanalyze
+            clearCache = forceReanalyze,
+            userQuery = ctx.userInput
         )
 
         ctx.llmResponse = result.synthesis

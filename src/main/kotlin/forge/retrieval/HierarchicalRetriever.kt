@@ -74,7 +74,7 @@ class HierarchicalRetriever(
         query: String,
         modules: List<ModuleRecord>,
         topK: Int = 20,
-        threshold: Float = 0.65f
+        threshold: Float = config.retrieval.similarityThreshold
     ): List<ScoredChunk> {
         val moduleIds = modules.map { it.id }
 
@@ -97,7 +97,7 @@ class HierarchicalRetriever(
         query: String,
         moduleTopK: Int = config.scale.moduleTopK,
         chunkTopK: Int = 20,
-        threshold: Float = 0.65f
+        threshold: Float = config.retrieval.similarityThreshold
     ): RetrievalResult {
         // Stage 1
         val relevantModules = findRelevantModules(query, moduleTopK)
@@ -130,7 +130,7 @@ class HierarchicalRetriever(
         query: String,
         moduleName: String,
         topK: Int = 20,
-        threshold: Float = 0.65f
+        threshold: Float = config.retrieval.similarityThreshold
     ): List<ScoredChunk> {
         val module = db.getModuleByName(moduleName) ?: return emptyList()
         return findRelevantChunksInModules(query, listOf(module), topK, threshold)

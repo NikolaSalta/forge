@@ -5,15 +5,15 @@ ollama:
 
 models:
   classify: "qwen3:1.7b"
-  reason: "deepseek-r1:8b"
-  code: "qwen2.5-coder:14b"
+  reason: "qwen2.5:14b"
+  code: "qwen2.5-coder:7b"
   embed: "qwen3-embedding:0.6b"
-  summarize: "qwen2.5:14b"
-  vision: "qwen2.5vl:7b"
+  summarize: "ministral-3:3b"
+  vision: "qwen3-vl:2b"
   fallback:
     classify: "deepseek-r1:1.5b"
-    reason: "qwen2.5:14b"
-    code: "qwen2.5-coder:7b"
+    reason: "qwen3:1.7b"
+    code: "deepseek-coder:1.3b"
     summarize: "qwen3:1.7b"
 
 workspace:
@@ -24,8 +24,8 @@ workspace:
   max_chunks_per_file: 200000
 
 retrieval:
-  max_context_chunks: 50
-  similarity_threshold: 0.50
+  max_context_chunks: 150
+  similarity_threshold: 0.25
   embedding_batch_size: 10
   scan_ignore:
     - "node_modules"
@@ -84,12 +84,12 @@ agents:
   enabled: true
   always_hot:
     - "qwen3:1.7b"
-    - "deepseek-r1:8b"
+    - "qwen2.5:14b"
   specialist_models:
-    CODE: "qwen2.5-coder:14b"
+    CODE: "qwen2.5-coder:7b"
     EMBED: "qwen3-embedding:0.6b"
-    SUMMARIZE: "qwen2.5:14b"
-    VISION: "qwen2.5vl:7b"
+    SUMMARIZE: "ministral-3:3b"
+    VISION: "qwen3-vl:2b"
   preload_on_startup: true
   max_total_memory_gb: 12.0
   heavy_model_threshold_gb: 6.0

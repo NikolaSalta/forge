@@ -9,7 +9,12 @@ import forge.web.TraceEvent
 import forge.workspace.Database
 import forge.workspace.EntityRecord
 import forge.workspace.FileRecord
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.SendChannel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -78,7 +83,8 @@ class DeepAnalyzer(
         evidence: Map<String, String>,
         workspacePath: Path,
         traceChannel: SendChannel<TraceEvent>?,
-        clearCache: Boolean = false
+        clearCache: Boolean = false,
+        userQuery: String = ""
     ): DeepAnalysisResult {
         val overallStart = System.currentTimeMillis()
 
@@ -98,7 +104,7 @@ class DeepAnalyzer(
 
         if (modules.isEmpty()) {
             // Fallback: treat entire repo as one module
-            val singleModule = analyzeModule(".", db, repoPath, workspacePath, 1, 1, traceChannel)
+            val singleModule = analyzeModule(".", db, repoPath, workspacePath, 1, 1, traceChannel, userQuery = userQuery)
             val synthesis = singleModule.analysis
             return DeepAnalysisResult(
                 moduleAnalyses = listOf(singleModule),
@@ -109,28 +115,37 @@ class DeepAnalyzer(
             )
         }
 
-        // 2. Analyze each module with progress
+        // 2. Analyze modules in PARALLEL with semaphore to limit concurrent LLM calls
         val totalModules = modules.size
-        val analyses = mutableListOf<ModuleAnalysis>()
+        val parallelLimit = Semaphore(3) // max 3 concurrent LLM calls
+        val completedCount = java.util.concurrent.atomic.AtomicInteger(0)
 
-        for ((idx, modulePath) in modules.withIndex()) {
-            traceChannel?.send(TraceEvent.analysisProgress(
-                current = idx + 1,
-                total = totalModules,
-                moduleName = modulePath,
-                percent = ((idx.toFloat() / totalModules) * 100).toInt()
-            ))
+        val analyses = coroutineScope {
+            modules.mapIndexed { idx, modulePath ->
+                async {
+                    parallelLimit.withPermit {
+                        traceChannel?.send(TraceEvent.analysisProgress(
+                            current = completedCount.get() + 1,
+                            total = totalModules,
+                            moduleName = modulePath,
+                            percent = ((completedCount.get().toFloat() / totalModules) * 100).toInt()
+                        ))
 
-            val analysis = analyzeModule(
-                modulePath = modulePath,
-                db = db,
-                repoPath = repoPath,
-                workspacePath = workspacePath,
-                current = idx + 1,
-                total = totalModules,
-                traceChannel = traceChannel
-            )
-            analyses.add(analysis)
+                        val analysis = analyzeModule(
+                            modulePath = modulePath,
+                            db = db,
+                            repoPath = repoPath,
+                            workspacePath = workspacePath,
+                            current = idx + 1,
+                            total = totalModules,
+                            traceChannel = traceChannel,
+                            userQuery = userQuery
+                        )
+                        completedCount.incrementAndGet()
+                        analysis
+                    }
+                }
+            }.awaitAll()
         }
 
         // Mark all modules complete
@@ -268,7 +283,8 @@ class DeepAnalyzer(
         workspacePath: Path,
         current: Int,
         total: Int,
-        traceChannel: SendChannel<TraceEvent>?
+        traceChannel: SendChannel<TraceEvent>?,
+        userQuery: String = ""
     ): ModuleAnalysis {
         val moduleStart = System.currentTimeMillis()
 
@@ -278,7 +294,9 @@ class DeepAnalyzer(
         val sanitizedName = modulePath.replace("/", "_").replace("\\", "_").replace(".", "_root_")
         val cacheFile = analysisDir.resolve("$sanitizedName.md")
 
-        if (Files.exists(cacheFile)) {
+        // Use cache only if user didn't ask a specific question
+        // (specific questions need fresh analysis tailored to the question)
+        if (userQuery.isBlank() && Files.exists(cacheFile)) {
             val cached = Files.readString(cacheFile)
             if (cached.isNotBlank() && cached.length > 100) {
                 return ModuleAnalysis(
@@ -306,7 +324,7 @@ class DeepAnalyzer(
         val indexSummary = buildIndexSummaryForModule(db, moduleFiles)
 
         // Build deep analysis prompt
-        val messages = buildDeepAnalysisPrompt(modulePath, fileContents, moduleFiles.size, indexSummary)
+        val messages = buildDeepAnalysisPrompt(modulePath, fileContents, moduleFiles.size, indexSummary, userQuery)
 
         // Call LLM with streaming
         val model = modelSelector.selectForTask(TaskType.REPO_ANALYSIS)
@@ -511,15 +529,26 @@ class DeepAnalyzer(
         modulePath: String,
         files: Map<String, String>,
         totalFiles: Int,
-        indexSummary: String = ""
+        indexSummary: String = "",
+        userQuery: String = ""
     ): List<ChatMessage> {
+        val userContext = if (userQuery.isNotBlank()) {
+            """
+
+The user's original question/instruction is:
+"$userQuery"
+
+You MUST analyze this module in the context of answering that specific question.
+If the user asked for a plan, recommendations, or specific analysis — address it directly for this module."""
+        } else ""
+
         val system = """You are a senior software architect performing a deep code analysis.
 Analyze the provided module with MAXIMUM DEPTH and PRECISION.
 Use ONLY ACTUAL names from the code and from the provided index data.
 NEVER invent, guess, or hallucinate class names, module names, or architectures.
 If you see specific class/method names in the index data, USE THOSE EXACT NAMES.
 If a file is truncated, note what was visible. If you don't know something, say so.
-Format your response in well-structured markdown."""
+Format your response in well-structured markdown.$userContext"""
 
         val user = buildString {
             appendLine("# Deep Analysis: Module \"$modulePath\"")
@@ -588,6 +617,14 @@ Analyze this module thoroughly. For EACH significant file, provide:
 - Missing error handling
 - Performance concerns
 - Code smells / tech debt
+
+### 8. Code Examples
+Include the most important code snippets from this module. Show:
+- Key class definitions with their fields and constructors
+- Important method implementations (not just signatures)
+- Configuration examples
+- Database schema or migration snippets
+Use actual code from the files above — do NOT invent code.
 
 Be EXHAUSTIVE. Use actual class names, method signatures, column names from the code.
 """.trimIndent())

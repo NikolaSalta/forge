@@ -45,14 +45,18 @@ class PromptBuilder {
         taskType: TaskType,
         evidence: List<String>,
         chunks: List<String>,
-        fileContents: Map<String, String>
+        fileContents: Map<String, String>,
+        userInput: String = ""
     ): List<ChatMessage> {
         // Try task-specific system prompt first, fall back to generic
         val taskTemplateName = taskType.name.lowercase()
         val systemTemplate = tryLoadTemplate("${taskTemplateName}_system")
             ?: tryLoadTemplate("system")
             ?: loadTemplate("task_system")
-        val system = systemTemplate.substituteAll(mapOf("task_type" to taskType.displayName))
+        val system = systemTemplate.substituteAll(mapOf(
+            "task_type" to taskType.displayName,
+            "user_input" to userInput
+        ))
 
         // Prioritize and filter evidence for better signal-to-noise
         val prioritizedEvidence = prioritizeEvidence(evidence, taskType)
@@ -104,7 +108,8 @@ class PromptBuilder {
                 "task_type" to taskType.displayName,
                 "evidence" to formattedEvidence,
                 "context_chunks" to formattedChunks,
-                "file_contents" to formattedFiles
+                "file_contents" to formattedFiles,
+                "user_input" to userInput
             )
         )
 
@@ -309,6 +314,13 @@ Rules:
         "task_system" -> """
             |You are Forge, an expert software engineering assistant.
             |You are performing the task: {{task_type}}.
+            |
+            |The user's specific question/instruction is:
+            |{{user_input}}
+            |
+            |You MUST address this specific question directly.
+            |Do not produce a generic template report if the user asked a specific question.
+            |Base your answer on the actual code and evidence provided below.
             |Provide thorough, accurate, and actionable analysis.
             |When generating code, produce complete, working implementations.
             |Use markdown formatting in your response.
@@ -316,6 +328,9 @@ Rules:
 
         "task_user" -> """
             |Task: {{task_type}}
+            |
+            |## User's Question
+            |{{user_input}}
             |
             |## Evidence
             |{{evidence}}
@@ -325,6 +340,8 @@ Rules:
             |
             |## File Contents
             |{{file_contents}}
+            |
+            |Remember: Answer the user's specific question above. Do not ignore it.
         """.trimMargin()
 
         "summarize_system" -> """

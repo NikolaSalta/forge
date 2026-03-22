@@ -54,6 +54,9 @@ class ProjectIndexCoordinator(
             filesProcessed = classStats.values.sum()
             onProgress?.invoke("CLASSIFICATION", "Classified $filesProcessed files", filesProcessed, totalFiles)
 
+            // Phase 1.5: Clear stale index data from previous runs
+            db.clearAllIndexData()
+
             // Phase 2: Entity extraction
             onProgress?.invoke("ENTITY_EXTRACTION", "Extracting code entities...", 0, totalFiles)
             entitiesFound = try {

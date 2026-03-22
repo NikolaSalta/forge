@@ -255,19 +255,35 @@ class EmbeddingStore(
     ): List<ScoredChunk> {
         val chunks = db.getChunksWithEmbeddings()
 
+        var skippedNull = 0
+        var skippedEmpty = 0
+        var skippedSize = 0
+        var belowThreshold = 0
+        var maxSim = -1f
+        var minSim = 2f
+
         val scored = chunks.mapNotNull { chunk ->
-            val rawEmbedding = chunk.embedding ?: return@mapNotNull null
-            if (rawEmbedding.isEmpty()) return@mapNotNull null  // skip failed-marker chunks
+            val rawEmbedding = chunk.embedding ?: run { skippedNull++; return@mapNotNull null }
+            if (rawEmbedding.isEmpty()) { skippedEmpty++; return@mapNotNull null }
             val chunkEmbedding = rawEmbedding.toFloatArray()
-            if (chunkEmbedding.size != queryEmbedding.size) return@mapNotNull null
+            if (chunkEmbedding.size != queryEmbedding.size) { skippedSize++; return@mapNotNull null }
 
             val similarity = cosineSimilarity(queryEmbedding, chunkEmbedding)
+            if (similarity > maxSim) maxSim = similarity
+            if (similarity < minSim) minSim = similarity
+
             if (similarity >= threshold) {
                 ScoredChunk(chunk, similarity)
             } else {
+                belowThreshold++
                 null
             }
         }
+
+        System.err.println("[RANK_CHUNKS] total=${chunks.size}, threshold=$threshold, " +
+            "passed=${scored.size}, belowThreshold=$belowThreshold, " +
+            "skippedNull=$skippedNull, skippedEmpty=$skippedEmpty, skippedSize=$skippedSize, " +
+            "maxSim=$maxSim, minSim=$minSim")
 
         return scored
             .sortedByDescending { it.score }

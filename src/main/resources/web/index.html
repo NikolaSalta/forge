@@ -485,12 +485,14 @@
   .chat-rating-btn:hover { background: #30363d; border-color: #58a6ff; }
   .chat-rating-btn.rated { background: #238636; border-color: #2ea043; color: #fff; }
 
+  .mode-btn { background: #21262d; border: 1px solid #30363d; color: #8b949e; cursor: pointer; transition: all 0.15s; }
+  .mode-btn:hover { border-color: #58a6ff; color: #c9d1d9; }
+  .mode-btn.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+
   .chat-input-area {
     border-top: 1px solid #30363d;
     padding: 12px 0;
-    display: flex;
-    gap: 8px;
-    align-items: flex-end;
+    flex-direction: column;
   }
   .chat-input {
     flex: 1;
@@ -954,8 +956,15 @@
       </div>
     </div>
     <div class="chat-input-area">
-      <textarea class="chat-input" id="chatInput" placeholder="Ask about your code..." rows="1" onkeydown="chatKeyDown(event)" oninput="autoResizeChat()"></textarea>
-      <button class="btn btn-primary" id="chatSendBtn" onclick="sendChat()">Send</button>
+      <div style="display:flex;gap:6px;margin-bottom:6px;">
+        <button class="btn mode-btn active" id="modeAgent" onclick="setMode('agent')" style="font-size:11px;padding:3px 10px;border-radius:4px;">⚡ Agent</button>
+        <button class="btn mode-btn" id="modePlan" onclick="setMode('plan')" style="font-size:11px;padding:3px 10px;border-radius:4px;">📋 Plan</button>
+        <span id="modeLabel" style="font-size:11px;color:#8b949e;line-height:24px;margin-left:8px;">Direct execution</span>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <textarea class="chat-input" id="chatInput" placeholder="Ask about your code..." rows="1" onkeydown="chatKeyDown(event)" oninput="autoResizeChat()"></textarea>
+        <button class="btn btn-primary" id="chatSendBtn" onclick="sendChat()">Send</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1504,6 +1513,19 @@ function updateWordCount() {
   el.className = words > 1000 ? 'over' : '';
 }
 
+// ===== Chat Mode =====
+let chatMode = 'agent';
+let currentPlanId = null;
+let planPhase = null; // SIMPLE_PLAN, IMPLEMENTATION_PLAN
+
+function setMode(mode) {
+  chatMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  const btn = mode === 'agent' ? document.getElementById('modeAgent') : document.getElementById('modePlan');
+  btn.classList.add('active');
+  document.getElementById('modeLabel').textContent = mode === 'agent' ? 'Direct execution' : 'Plan → Approve → Execute';
+}
+
 // ===== Chat =====
 function chatKeyDown(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
@@ -1566,7 +1588,27 @@ async function sendChat() {
 
   input.value = '';
   autoResizeChat();
+
+  // If in plan mode and we have an active plan, handle approval/feedback
+  if (chatMode === 'plan' && currentPlanId) {
+    if (query.toLowerCase() === 'approve' || query.toLowerCase() === 'yes' || query.toLowerCase() === 'ok') {
+      addChatMessage('user', '✅ Approved');
+      await approvePlan();
+      return;
+    } else {
+      addChatMessage('user', query);
+      await refinePlanWithFeedback(query);
+      return;
+    }
+  }
+
   addChatMessage('user', query);
+
+  // If Plan mode, generate plan first
+  if (chatMode === 'plan') {
+    await generatePlan(query);
+    return;
+  }
 
   // Create AI message with live trace panel
   const container = document.getElementById('chatMessages');
@@ -1674,6 +1716,166 @@ async function sendChat() {
   }
 
   document.getElementById('chatSendBtn').disabled = false;
+}
+
+// ===== Plan Mode Functions =====
+
+async function generatePlan(query) {
+  addChatMessage('ai', '📋 Generating plan...');
+  try {
+    const resp = await fetch('/api/plan/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({query})
+    });
+    const data = await resp.json();
+    if (data.error) { addChatMessage('ai', '❌ ' + data.error); return; }
+    currentPlanId = data.planId;
+    planPhase = 'SIMPLE_PLAN';
+    showPlanForApproval(data.plan, 'Simple Plan');
+  } catch (e) {
+    addChatMessage('ai', '❌ Plan generation failed: ' + e.message);
+  }
+}
+
+async function refinePlanWithFeedback(feedback) {
+  addChatMessage('ai', '🔄 Refining plan...');
+  const endpoint = planPhase === 'IMPLEMENTATION_PLAN' ? '/api/plan/refine-impl' : '/api/plan/refine';
+  try {
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({planId: currentPlanId, feedback})
+    });
+    const data = await resp.json();
+    if (data.error) { addChatMessage('ai', '❌ ' + data.error); return; }
+    const label = planPhase === 'IMPLEMENTATION_PLAN' ? 'Updated Implementation Plan' : 'Updated Plan';
+    showPlanForApproval(data.plan, label + ' (rev ' + data.revisions + ')');
+  } catch (e) {
+    addChatMessage('ai', '❌ Refinement failed: ' + e.message);
+  }
+}
+
+async function approvePlan() {
+  addChatMessage('ai', '⏳ Processing approval...');
+  try {
+    const resp = await fetch('/api/plan/approve', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({planId: currentPlanId})
+    });
+    const data = await resp.json();
+    if (data.error) { addChatMessage('ai', '❌ ' + data.error); return; }
+
+    if (data.phase === 'IMPLEMENTATION_PLAN') {
+      planPhase = 'IMPLEMENTATION_PLAN';
+      showPlanForApproval(data.plan, 'Implementation Plan');
+    } else if (data.phase === 'IMPLEMENTATION_APPROVED') {
+      addChatMessage('ai', '✅ All plans approved. Executing...');
+      await executePlan();
+    }
+  } catch (e) {
+    addChatMessage('ai', '❌ Approval failed: ' + e.message);
+  }
+}
+
+async function executePlan() {
+  // Reuse the normal streaming UI but via /api/plan/execute
+  const container = document.getElementById('chatMessages');
+  const msg = document.createElement('div');
+  msg.className = 'chat-msg';
+  msg.innerHTML = `
+    <div class="chat-avatar chat-avatar-ai">&#9889;</div>
+    <div class="chat-body">
+      <div class="chat-sender">FORGE <span style="color:#3fb950;font-size:11px;">(plan execution)</span></div>
+      <div class="live-trace">
+        <div class="live-trace-header" onclick="this.parentElement.classList.toggle('collapsed')">Execution Trace</div>
+        <div class="live-trace-body"></div>
+      </div>
+      <div class="chat-text" style="margin-top:8px;"></div>
+      <div class="chat-meta" style="display:none;margin-top:8px;"></div>
+    </div>`;
+  container.appendChild(msg);
+  container.scrollTop = container.scrollHeight;
+
+  const traceBody = msg.querySelector('.live-trace-body');
+  const responseEl = msg.querySelector('.chat-text');
+  const finalMeta = msg.querySelector('.chat-meta');
+  const traceSteps = {};
+  responseEl._rawText = '';
+
+  document.getElementById('chatSendBtn').disabled = true;
+
+  try {
+    const resp = await fetch('/api/plan/execute', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({planId: currentPlanId})
+    });
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const event = JSON.parse(line.substring(6));
+            handleTraceEvent(event, traceBody, responseEl, traceSteps, finalMeta);
+          } catch (_) {}
+        }
+      }
+      container.scrollTop = container.scrollHeight;
+    }
+  } catch (e) {
+    responseEl.textContent = 'Execution failed: ' + e.message;
+  }
+
+  currentPlanId = null;
+  planPhase = null;
+  document.getElementById('chatSendBtn').disabled = false;
+}
+
+function showPlanForApproval(planText, title) {
+  const container = document.getElementById('chatMessages');
+  const msg = document.createElement('div');
+  msg.className = 'chat-msg';
+  const rendered = renderMarkdown(planText);
+  const approveId = 'approve-' + Date.now();
+  msg.innerHTML = `
+    <div class="chat-avatar chat-avatar-ai">&#128203;</div>
+    <div class="chat-body">
+      <div class="chat-sender">${title}</div>
+      <div class="chat-text" style="border:1px solid #30363d;border-radius:6px;padding:12px;background:#161b22;">${rendered}</div>
+      <div id="${approveId}" style="margin-top:12px;display:flex;gap:10px;align-items:center;">
+        <button class="btn" onclick="handlePlanApprove(this)" style="background:#238636;border:1px solid #2ea043;color:#fff;padding:6px 18px;border-radius:6px;font-size:13px;cursor:pointer;">✅ Approve</button>
+        <button class="btn" onclick="handlePlanEdit(this)" style="background:#21262d;border:1px solid #30363d;color:#c9d1d9;padding:6px 18px;border-radius:6px;font-size:13px;cursor:pointer;">✏️ Edit / Add Requirements</button>
+      </div>
+    </div>`;
+  container.appendChild(msg);
+  container.scrollTop = container.scrollHeight;
+}
+
+function handlePlanApprove(btn) {
+  // Disable buttons to prevent double-click
+  const btnRow = btn.parentElement;
+  btnRow.innerHTML = '<span style="color:#3fb950;font-size:13px;">✅ Approved</span>';
+  addChatMessage('user', '✅ Approved');
+  approvePlan();
+}
+
+function handlePlanEdit(btn) {
+  // Hide buttons, focus the input for feedback
+  const btnRow = btn.parentElement;
+  btnRow.innerHTML = '<span style="color:#8b949e;font-size:12px;">Type your changes below and press Send</span>';
+  document.getElementById('chatInput').focus();
+  document.getElementById('chatInput').placeholder = 'Type your changes or additional requirements...';
 }
 
 function handleTraceEvent(event, traceBody, responseEl, traceSteps, finalMeta) {

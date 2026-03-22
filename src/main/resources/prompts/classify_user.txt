@@ -1,0 +1,4 @@
+Classify the following user request into a task type.
+Remember: requests to ANALYZE, REVIEW, PLAN, or EXPLAIN are analysis tasks (ARCHITECTURE_REVIEW, REPO_ANALYSIS), NOT implementation tasks (IMPLEMENT_FEATURE, FULLSTACK_FEATURE).
+
+User request: {{user_input}}
