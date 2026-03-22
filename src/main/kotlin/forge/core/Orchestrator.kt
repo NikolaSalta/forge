@@ -246,8 +246,11 @@ class Orchestrator(
             focusModule = focusModule
         )
 
-        // Determine if this is a deep analysis task
-        val isDeepAnalysis = intent.taskType in setOf(
+        // Determine if this is a deep analysis task vs a transformation/planning task
+        // Transformation prompts should NOT use per-module deep analysis — they need
+        // whole-repo reasoning with the user's instruction as primary input.
+        val isTransformationPrompt = isTransformationRequest(userInput)
+        val isDeepAnalysis = !isTransformationPrompt && intent.taskType in setOf(
             TaskType.REPO_ANALYSIS,
             TaskType.PROJECT_OVERVIEW,
             TaskType.ARCHITECTURE_REVIEW
@@ -262,10 +265,12 @@ class Orchestrator(
                 val stageStart = System.currentTimeMillis()
                 try {
                     if (stage.name == "LLM_CALL" && isDeepAnalysis) {
-                        // ── Deep multi-pass analysis ─────────────────────────
+                        // ── Deep multi-pass analysis (module-by-module) ─────
                         executeDeepAnalysis(context, traceChannel, forceReanalyze)
                     } else if (stage.name == "LLM_CALL") {
-                        // ── Streaming LLM call with token-level trace ────────
+                        // ── Single whole-repo LLM call (streaming) ──────────
+                        // Used for: transformation plans, feature requests,
+                        // code generation, and any non-deep-analysis task.
                         executeStreamingLlmCall(context, traceChannel)
                     } else {
                         stage.execute(context)
@@ -483,6 +488,28 @@ class Orchestrator(
         val attachDuration = System.currentTimeMillis() - attachStart
         trace.add(TraceEntry("ATTACH", "Processed ${attachedFiles.size} attached file(s)", attachDuration))
         return attachedContents
+    }
+
+    /**
+     * Detects if the user's prompt is asking for a transformation, migration,
+     * or architectural planning task — not just descriptive analysis.
+     * These prompts should use whole-repo reasoning, not per-module deep analysis.
+     */
+    private fun isTransformationRequest(userInput: String): Boolean {
+        val lower = userInput.lowercase()
+        val transformationKeywords = listOf(
+            "план превращения", "план трансформации", "migration plan",
+            "transformation plan", "platformization", "превратить в платформу",
+            "convert to platform", "turn into platform", "refactor into",
+            "restructure", "reorganize", "modular architecture",
+            "step by step plan", "пошаговый план", "roadmap",
+            "как превратить", "how to transform", "how to convert",
+            "architecture plan", "архитектурный план",
+            "migration roadmap", "migration strategy",
+            "create a plan", "составь план", "build a plan",
+            "design a platform", "спроектируй платформу"
+        )
+        return transformationKeywords.any { it in lower }
     }
 
     /**
