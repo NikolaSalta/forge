@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "forge-web",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["web/server.js"],
+      "port": 3456
+    }
+  ]
+}

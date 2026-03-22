@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FORGE v2 — Local AI Code Intelligence</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+    background: #0a0e17;
+    color: #e0e6f0;
+    min-height: 100vh;
+  }
+  .header {
+    background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+    border-bottom: 1px solid #30363d;
+    padding: 24px 32px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+  .logo {
+    color: #58a6ff;
+    font-size: 14px;
+    line-height: 1.2;
+    white-space: pre;
+  }
+  .header-info h1 {
+    font-size: 20px;
+    color: #f0f6fc;
+    font-weight: 600;
+  }
+  .header-info p {
+    color: #8b949e;
+    font-size: 13px;
+    margin-top: 4px;
+  }
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .status-ok { background: #0d1f0d; color: #3fb950; border: 1px solid #238636; }
+  .status-running { background: #1a1500; color: #d29922; border: 1px solid #9e6a03; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .status-ok .status-dot { background: #3fb950; box-shadow: 0 0 6px #3fb950; }
+  .status-running .status-dot { background: #d29922; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .main { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
+
+  /* ===== Path Selector ===== */
+  .path-bar {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .path-icon { font-size: 18px; color: #58a6ff; flex-shrink: 0; }
+  .path-label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; flex-shrink: 0; }
+  .path-value {
+    font-size: 13px;
+    color: #e0e6f0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .path-db-status {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    flex-shrink: 0;
+  }
+  .path-db-ok { background: #0d1f0d; color: #3fb950; border: 1px solid #238636; }
+  .path-db-missing { background: #1a1500; color: #d29922; border: 1px solid #9e6a03; }
+  .path-change-btn {
+    background: #21262d;
+    border: 1px solid #30363d;
+    color: #58a6ff;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+  .path-change-btn:hover { background: #30363d; border-color: #58a6ff; }
+
+  .path-panel {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
+    display: none;
+  }
+  .path-panel.open { display: block; }
+  .path-panel-header {
+    background: #0d1117;
+    padding: 12px 16px;
+    border-bottom: 1px solid #30363d;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .path-panel-title { font-size: 13px; font-weight: 600; color: #f0f6fc; }
+  .path-panel-close {
+    background: none;
+    border: none;
+    color: #8b949e;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+  }
+  .path-panel-close:hover { color: #f0f6fc; }
+
+  .path-tabs {
+    display: flex;
+    border-bottom: 1px solid #30363d;
+  }
+  .path-tab {
+    padding: 10px 20px;
+    font-size: 12px;
+    font-family: inherit;
+    color: #8b949e;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .path-tab:hover { color: #e0e6f0; }
+  .path-tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+
+  .path-tab-content { padding: 16px; display: none; }
+  .path-tab-content.active { display: block; }
+
+  /* Workspaces list */
+  .workspace-list { list-style: none; }
+  .workspace-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .workspace-item:hover { background: #21262d; border-color: #58a6ff; }
+  .workspace-item.current { background: #0d1f0d; border-color: #238636; }
+  .workspace-icon { font-size: 16px; flex-shrink: 0; }
+  .workspace-info { flex: 1; min-width: 0; }
+  .workspace-path {
+    font-size: 13px;
+    color: #e0e6f0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .workspace-meta { font-size: 11px; color: #8b949e; margin-top: 2px; }
+  .workspace-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    flex-shrink: 0;
+  }
+
+  /* Custom path input */
+  .custom-path-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .custom-path-input {
+    flex: 1;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 10px 14px;
+    color: #e0e6f0;
+    font-family: inherit;
+    font-size: 13px;
+  }
+  .custom-path-input:focus { outline: none; border-color: #58a6ff; }
+  .custom-path-input::placeholder { color: #484f58; }
+
+  /* Browser */
+  .browser-breadcrumb {
+    font-size: 12px;
+    color: #8b949e;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .browser-breadcrumb span {
+    color: #58a6ff;
+    cursor: pointer;
+  }
+  .browser-breadcrumb span:hover { text-decoration: underline; }
+  .browser-list {
+    list-style: none;
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    background: #0d1117;
+  }
+  .browser-list::-webkit-scrollbar { width: 8px; }
+  .browser-list::-webkit-scrollbar-track { background: #0d1117; }
+  .browser-list::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+  .browser-item {
+    padding: 8px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #21262d;
+    transition: background 0.15s;
+  }
+  .browser-item:last-child { border-bottom: none; }
+  .browser-item:hover { background: #161b22; }
+  .browser-item-icon { color: #58a6ff; flex-shrink: 0; }
+  .browser-item-name { color: #e0e6f0; }
+  .browser-item-git {
+    font-size: 10px;
+    color: #3fb950;
+    margin-left: auto;
+    background: #0d1f0d;
+    padding: 1px 6px;
+    border-radius: 8px;
+    border: 1px solid #238636;
+  }
+  .browser-select-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+  }
+  .browser-current-path {
+    font-size: 12px;
+    color: #8b949e;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .empty-msg { color: #484f58; font-size: 13px; padding: 12px; }
+
+  /* ===== Stats ===== */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .stat-label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-value { font-size: 28px; color: #58a6ff; font-weight: 700; margin-top: 4px; }
+  .stat-sub { font-size: 12px; color: #8b949e; margin-top: 2px; }
+
+  .actions {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    background: #21262d;
+    color: #e0e6f0;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn:hover { background: #30363d; border-color: #8b949e; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: #238636; border-color: #2ea043; color: #fff; }
+  .btn-primary:hover { background: #2ea043; }
+  .btn-blue { background: #1f6feb; border-color: #388bfd; color: #fff; }
+  .btn-blue:hover { background: #388bfd; }
+
+  .output-panel {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .panel-header {
+    background: #161b22;
+    padding: 12px 16px;
+    border-bottom: 1px solid #30363d;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .panel-title { font-size: 13px; font-weight: 600; color: #f0f6fc; }
+  .panel-body {
+    padding: 16px;
+    max-height: 600px;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .panel-body::-webkit-scrollbar { width: 8px; }
+  .panel-body::-webkit-scrollbar-track { background: #0d1117; }
+  .panel-body::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+
+  .trace-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+  }
+  .trace-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: #161b22;
+    color: #8b949e;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid #30363d;
+  }
+  .trace-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #21262d;
+    font-size: 13px;
+  }
+  .trace-stage { color: #58a6ff; font-weight: 600; }
+  .trace-detail { color: #8b949e; }
+  .trace-time { color: #3fb950; font-weight: 600; text-align: right; }
+  .trace-fast { color: #3fb950; }
+  .trace-medium { color: #d29922; }
+  .trace-slow { color: #f85149; }
+
+  .response-content { color: #c9d1d9; }
+  .response-content h1, .response-content h2 { color: #58a6ff; margin: 16px 0 8px; }
+  .response-content h3 { color: #79c0ff; margin: 12px 0 6px; }
+  .response-content strong { color: #f0f6fc; }
+  .response-content code { background: #161b22; padding: 2px 6px; border-radius: 4px; color: #79c0ff; }
+
+  .module-input {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 10px 14px;
+    color: #e0e6f0;
+    font-family: inherit;
+    font-size: 13px;
+    width: 260px;
+  }
+  .module-input:focus { outline: none; border-color: #58a6ff; }
+  .module-input::placeholder { color: #484f58; }
+
+  .query-area {
+    width: 100%;
+    margin-bottom: 24px;
+  }
+  .query-textarea {
+    width: 100%;
+    min-height: 120px;
+    max-height: 400px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 12px 14px;
+    color: #e0e6f0;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.6;
+    resize: vertical;
+  }
+  .query-textarea:focus { outline: none; border-color: #58a6ff; }
+  .query-textarea::placeholder { color: #484f58; }
+  .query-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    font-size: 11px;
+    color: #8b949e;
+  }
+  .query-meta .over { color: #f85149; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">███████╗ ██████╗ ██████╗  ██████╗ ███████╗
+██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝
+█████╗  ██║   ██║██████╔╝██║  ███╗█████╗
+██╔══╝  ██║   ██║██╔══██╗██║   ██║██╔══╝
+██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗
+╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝</div>
+  <div class="header-info">
+    <h1>FORGE v2 <span id="statusBadge" class="status-badge status-ok"><span class="status-dot"></span>Ready</span></h1>
+    <p>Local AI Code Intelligence &mdash; Universal Agent</p>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- Path Selector Bar -->
+  <div class="path-bar" id="pathBar">
+    <span class="path-icon">&#128193;</span>
+    <span class="path-label">Repo</span>
+    <span class="path-value" id="pathDisplay">Loading...</span>
+    <span class="path-db-status" id="pathDbStatus"></span>
+    <button class="path-change-btn" id="pathChangeBtn" onclick="togglePathPanel()">Change</button>
+  </div>
+
+  <!-- Path Selection Panel -->
+  <div class="path-panel" id="pathPanel">
+    <div class="path-panel-header">
+      <span class="path-panel-title">Select Repository</span>
+      <button class="path-panel-close" onclick="togglePathPanel()">&times;</button>
+    </div>
+    <div class="path-tabs">
+      <button class="path-tab active" onclick="switchTab('workspaces', this)">Known Workspaces</button>
+      <button class="path-tab" onclick="switchTab('custom', this)">Custom Path</button>
+      <button class="path-tab" onclick="switchTab('browse', this)">Browse</button>
+    </div>
+
+    <!-- Tab: Known Workspaces -->
+    <div class="path-tab-content active" id="tab-workspaces">
+      <ul class="workspace-list" id="workspaceList">
+        <li class="empty-msg">Loading workspaces...</li>
+      </ul>
+    </div>
+
+    <!-- Tab: Custom Path -->
+    <div class="path-tab-content" id="tab-custom">
+      <div class="custom-path-row">
+        <input type="text" class="custom-path-input" id="customPathInput" placeholder="/path/to/your/repository">
+        <button class="btn btn-primary" onclick="applyCustomPath()">Apply</button>
+      </div>
+      <p style="font-size:12px;color:#8b949e;">Enter the full absolute path to any repository or folder on your machine.</p>
+    </div>
+
+    <!-- Tab: Browse -->
+    <div class="path-tab-content" id="tab-browse">
+      <div class="browser-breadcrumb" id="browserBreadcrumb"></div>
+      <ul class="browser-list" id="browserList">
+        <li class="empty-msg">Loading...</li>
+      </ul>
+      <div class="browser-select-row">
+        <span class="browser-current-path" id="browserCurrentPath"></span>
+        <button class="btn btn-primary" onclick="selectBrowsedPath()">Select This Folder</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card"><div class="stat-label">Repository</div><div class="stat-value" id="statFiles">—</div><div class="stat-sub">loading...</div></div>
+    <div class="stat-card"><div class="stat-label">Modules</div><div class="stat-value" id="statModules">—</div><div class="stat-sub">loading...</div></div>
+    <div class="stat-card"><div class="stat-label">Chunks</div><div class="stat-value" id="statChunks">—</div><div class="stat-sub">loading...</div></div>
+    <div class="stat-card"><div class="stat-label">Embeddings</div><div class="stat-value" id="statEmbeddings">—</div><div class="stat-sub">loading...</div></div>
+    <div class="stat-card"><div class="stat-label">Ollama Models</div><div class="stat-value" id="statModels">—</div><div class="stat-sub">loading...</div></div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" id="btnAnalyze" onclick="runAnalyze()">&#9654; Run Analyze</button>
+    <button class="btn btn-blue" id="btnFocus" onclick="runFocus()">&#128269; Run Focus</button>
+    <input type="text" class="module-input" id="moduleInput" placeholder="Module: platform/lang-api" value="platform/lang-api">
+    <button class="btn" id="btnStatus" onclick="runStatus()">&#9881; Status</button>
+  </div>
+
+  <div class="query-area">
+    <textarea class="query-textarea" id="queryInput" rows="6" placeholder="Enter your question or prompt here (up to 1000 words)...&#10;&#10;Example: What are the main abstractions in this module? How do they interact with each other? Describe the design patterns used." oninput="updateWordCount()">What are the main abstractions?</textarea>
+    <div class="query-meta">
+      <span>Supports multi-line prompts up to 1000 words</span>
+      <span id="wordCount">5 / 1000 words</span>
+    </div>
+  </div>
+
+  <div class="output-panel" id="tracePanel" style="margin-bottom: 16px;">
+    <div class="panel-header">
+      <span class="panel-title">Execution Trace</span>
+      <span id="traceTime" style="color: #8b949e; font-size: 12px;"></span>
+    </div>
+    <div class="panel-body" id="traceBody">
+      <p style="color: #484f58;">Click a command to see the execution trace...</p>
+    </div>
+  </div>
+
+  <div class="output-panel">
+    <div class="panel-header">
+      <span class="panel-title" id="responseTitle">Response</span>
+    </div>
+    <div class="panel-body response-content" id="responseBody">
+      <p style="color: #484f58;">Output will appear here...</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== Path Management =====
+
+let currentBrowsePath = '';
+
+async function fetchJSON(url, opts) {
+  const res = await fetch(url, opts);
+  return res.json();
+}
+
+async function loadCurrentPath() {
+  try {
+    const data = await fetchJSON('/api/current-path');
+    document.getElementById('pathDisplay').textContent = data.repoPath;
+    const dbBadge = document.getElementById('pathDbStatus');
+    if (data.hasDb) {
+      dbBadge.className = 'path-db-status path-db-ok';
+      dbBadge.textContent = 'DB Ready';
+    } else {
+      dbBadge.className = 'path-db-status path-db-missing';
+      dbBadge.textContent = 'No DB';
+    }
+  } catch (e) {
+    document.getElementById('pathDisplay').textContent = 'Error loading path';
+  }
+}
+
+function togglePathPanel() {
+  const panel = document.getElementById('pathPanel');
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) {
+    panel.classList.remove('open');
+  } else {
+    panel.classList.add('open');
+    loadWorkspaces();
+  }
+}
+
+function switchTab(tabId, btn) {
+  document.querySelectorAll('.path-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.path-tab-content').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + tabId).classList.add('active');
+  if (tabId === 'browse') loadBrowse();
+  if (tabId === 'workspaces') loadWorkspaces();
+}
+
+async function loadWorkspaces() {
+  const list = document.getElementById('workspaceList');
+  list.innerHTML = '<li class="empty-msg">Loading...</li>';
+  try {
+    const workspaces = await fetchJSON('/api/workspaces');
+    if (workspaces.length === 0) {
+      list.innerHTML = '<li class="empty-msg">No workspaces found. Run analyze on a repository first.</li>';
+      return;
+    }
+    list.innerHTML = '';
+    for (const ws of workspaces) {
+      const li = document.createElement('li');
+      li.className = 'workspace-item' + (ws.isCurrent ? ' current' : '');
+      const date = ws.createdAt ? new Date(ws.createdAt).toLocaleDateString() : '?';
+      li.innerHTML = `
+        <span class="workspace-icon">${ws.isCurrent ? '&#9989;' : '&#128193;'}</span>
+        <div class="workspace-info">
+          <div class="workspace-path">${escHtml(ws.repoPath)}</div>
+          <div class="workspace-meta">Created: ${date} &bull; ${ws.hasDb ? 'DB ready' : 'No DB'}</div>
+        </div>
+        ${ws.isCurrent ? '<span class="workspace-badge path-db-ok">Current</span>' : ''}
+      `;
+      li.onclick = () => setPath(ws.repoPath);
+      list.appendChild(li);
+    }
+  } catch (e) {
+    list.innerHTML = '<li class="empty-msg">Error loading workspaces</li>';
+  }
+}
+
+async function setPath(newPath) {
+  try {
+    const data = await fetchJSON('/api/set-path', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: newPath })
+    });
+    if (data.error) {
+      alert('Error: ' + data.error);
+      return;
+    }
+    document.getElementById('pathPanel').classList.remove('open');
+    loadCurrentPath();
+    loadStats();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+function applyCustomPath() {
+  const input = document.getElementById('customPathInput');
+  const val = input.value.trim();
+  if (!val) { alert('Please enter a path'); return; }
+  setPath(val);
+}
+
+async function loadBrowse(dir) {
+  const list = document.getElementById('browserList');
+  list.innerHTML = '<li class="empty-msg">Loading...</li>';
+  try {
+    const qdir = dir ? '?dir=' + encodeURIComponent(dir) : '';
+    const data = await fetchJSON('/api/browse' + qdir);
+    currentBrowsePath = data.current;
+    document.getElementById('browserCurrentPath').textContent = data.current;
+
+    // Breadcrumb
+    const parts = data.current.split('/').filter(Boolean);
+    const bc = document.getElementById('browserBreadcrumb');
+    bc.innerHTML = '';
+    let accumulated = '';
+    const rootSpan = document.createElement('span');
+    rootSpan.textContent = '/';
+    rootSpan.onclick = () => loadBrowse('/');
+    bc.appendChild(rootSpan);
+    for (let i = 0; i < parts.length; i++) {
+      accumulated += '/' + parts[i];
+      const sep = document.createTextNode(' / ');
+      bc.appendChild(sep);
+      const s = document.createElement('span');
+      s.textContent = parts[i];
+      const target = accumulated;
+      s.onclick = () => loadBrowse(target);
+      bc.appendChild(s);
+    }
+
+    // Directory list
+    list.innerHTML = '';
+    if (data.current !== data.parent) {
+      const upLi = document.createElement('li');
+      upLi.className = 'browser-item';
+      upLi.innerHTML = '<span class="browser-item-icon">&#11014;</span><span class="browser-item-name">..</span>';
+      upLi.onclick = () => loadBrowse(data.parent);
+      list.appendChild(upLi);
+    }
+    if (data.dirs && data.dirs.length > 0) {
+      for (const d of data.dirs) {
+        const li = document.createElement('li');
+        li.className = 'browser-item';
+        li.innerHTML = `<span class="browser-item-icon">&#128193;</span><span class="browser-item-name">${escHtml(d.name)}</span>`;
+        li.onclick = () => loadBrowse(d.path);
+        list.appendChild(li);
+      }
+    } else if (!data.dirs || data.dirs.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'empty-msg';
+      li.textContent = 'No subdirectories';
+      list.appendChild(li);
+    }
+    if (data.isGitRepo) {
+      document.getElementById('browserCurrentPath').innerHTML =
+        escHtml(data.current) + ' <span style="color:#3fb950;font-size:10px;background:#0d1f0d;padding:1px 6px;border-radius:8px;border:1px solid #238636;">git repo</span>';
+    }
+  } catch (e) {
+    list.innerHTML = '<li class="empty-msg">Error: ' + escHtml(e.message) + '</li>';
+  }
+}
+
+function selectBrowsedPath() {
+  if (currentBrowsePath) setPath(currentBrowsePath);
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ===== Stats & Commands =====
+
+async function loadStats() {
+  try {
+    const data = await fetchJSON('/api/stats');
+    document.getElementById('statFiles').textContent = data.files?.toLocaleString() || '—';
+    document.getElementById('statFiles').parentElement.querySelector('.stat-sub').textContent = 'source files';
+    document.getElementById('statModules').textContent = data.modules?.toLocaleString() || '—';
+    document.getElementById('statModules').parentElement.querySelector('.stat-sub').textContent = data.moduleTypes || 'IntelliJ modules';
+    document.getElementById('statChunks').textContent = data.chunks?.toLocaleString() || '—';
+    document.getElementById('statChunks').parentElement.querySelector('.stat-sub').textContent = 'code chunks';
+    document.getElementById('statEmbeddings').textContent = data.embeddings?.toLocaleString() || '—';
+    document.getElementById('statEmbeddings').parentElement.querySelector('.stat-sub').textContent = `${data.embeddingPct || 0}% embedded`;
+    document.getElementById('statModels').textContent = data.ollamaModels || '—';
+    document.getElementById('statModels').parentElement.querySelector('.stat-sub').textContent = 'available';
+  } catch(e) {
+    console.error('Stats load failed:', e);
+  }
+}
+
+function setRunning(label) {
+  const badge = document.getElementById('statusBadge');
+  badge.className = 'status-badge status-running';
+  badge.innerHTML = '<span class="status-dot"></span>' + label;
+  document.querySelectorAll('.btn').forEach(b => b.disabled = true);
+}
+
+function setReady() {
+  const badge = document.getElementById('statusBadge');
+  badge.className = 'status-badge status-ok';
+  badge.innerHTML = '<span class="status-dot"></span>Ready';
+  document.querySelectorAll('.btn').forEach(b => b.disabled = false);
+}
+
+function renderTrace(trace) {
+  if (!trace || trace.length === 0) return '<p style="color:#484f58;">No trace data</p>';
+  let html = '<table class="trace-table"><thead><tr><th>Stage</th><th>Detail</th><th style="text-align:right">Duration</th></tr></thead><tbody>';
+  let total = 0;
+  for (const t of trace) {
+    const ms = t.durationMs || 0;
+    total += ms;
+    const cls = ms < 1000 ? 'trace-fast' : ms < 30000 ? 'trace-medium' : 'trace-slow';
+    const timeStr = ms < 1000 ? ms + 'ms' : (ms / 1000).toFixed(1) + 's';
+    html += `<tr><td class="trace-stage">${t.stage}</td><td class="trace-detail">${t.detail || ''}</td><td class="trace-time ${cls}">${timeStr}</td></tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('traceTime').textContent = 'Total: ' + (total / 1000).toFixed(1) + 's';
+  return html;
+}
+
+function renderMarkdown(text) {
+  if (!text) return '';
+  return text
+    .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+    .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+    .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`(.*?)`/g, '<code>$1</code>')
+    .replace(/^- (.*$)/gm, '&bull; $1')
+    .replace(/\n/g, '<br>');
+}
+
+async function runAnalyze() {
+  setRunning('Analyzing...');
+  document.getElementById('traceBody').innerHTML = '<p style="color:#d29922;">&#9203; Running forge analyze... (this may take several minutes)</p>';
+  document.getElementById('responseBody').innerHTML = '<p style="color:#d29922;">&#9203; Waiting for LLM response...</p>';
+  document.getElementById('responseTitle').textContent = 'Response — Repository Analysis';
+  try {
+    const data = await fetchJSON('/api/analyze');
+    document.getElementById('traceBody').innerHTML = renderTrace(data.trace);
+    const successHeader = '<div style="background:#0d1f0d;border:1px solid #238636;border-radius:6px;padding:10px 14px;margin-bottom:12px;color:#3fb950;font-weight:600;">&#9989; LLM Response received — ' + (data.response?.length || 0) + ' chars</div>';
+    document.getElementById('responseBody').innerHTML = successHeader + renderMarkdown(data.response);
+  } catch(e) {
+    document.getElementById('responseBody').innerHTML = '<p style="color:#f85149;">&#10060; Error: ' + e.message + '</p>';
+  }
+  setReady();
+  loadStats();
+}
+
+async function runFocus() {
+  const module = document.getElementById('moduleInput').value || 'platform/lang-api';
+  const query = document.getElementById('queryInput').value || 'What are the main abstractions?';
+  setRunning('Focusing...');
+  document.getElementById('traceBody').innerHTML = `<p style="color:#d29922;">&#9203; Running forge focus on ${module}... (this may take several minutes)</p>`;
+  document.getElementById('responseBody').innerHTML = '<p style="color:#d29922;">&#9203; Waiting for LLM response...</p>';
+  document.getElementById('responseTitle').textContent = 'Response — Focus: ' + module;
+  try {
+    const data = await fetchJSON('/api/focus?module=' + encodeURIComponent(module) + '&query=' + encodeURIComponent(query));
+    document.getElementById('traceBody').innerHTML = renderTrace(data.trace);
+    const model = data.raw?.includes('qwen2.5-coder') ? 'qwen2.5-coder:14b' : 'LLM';
+    const successHeader = '<div style="background:#0d1f0d;border:1px solid #238636;border-radius:6px;padding:10px 14px;margin-bottom:12px;color:#3fb950;font-weight:600;">&#9989; LLM Response received (' + model + ') — ' + (data.response?.length || 0) + ' chars</div>';
+    document.getElementById('responseBody').innerHTML = successHeader + renderMarkdown(data.response);
+  } catch(e) {
+    document.getElementById('responseBody').innerHTML = '<p style="color:#f85149;">&#10060; Error: ' + e.message + '</p>';
+  }
+  setReady();
+  loadStats();
+}
+
+async function runStatus() {
+  setRunning('Checking...');
+  try {
+    const data = await fetchJSON('/api/status');
+    document.getElementById('traceBody').innerHTML = '<p style="color:#3fb950;">Forge status checked successfully</p>';
+    document.getElementById('responseBody').innerHTML = '<pre>' + (data.output || 'OK') + '</pre>';
+    document.getElementById('responseTitle').textContent = 'Response — Status';
+  } catch(e) {
+    document.getElementById('responseBody').innerHTML = '<p style="color:#f85149;">Error: ' + e.message + '</p>';
+  }
+  setReady();
+  loadStats();
+}
+
+function updateWordCount() {
+  const text = document.getElementById('queryInput').value.trim();
+  const words = text ? text.split(/\s+/).length : 0;
+  const el = document.getElementById('wordCount');
+  el.textContent = words + ' / 1000 words';
+  el.className = words > 1000 ? 'over' : '';
+}
+
+// Init
+loadCurrentPath();
+loadStats();
+updateWordCount();
+</script>
+</body>
+</html>

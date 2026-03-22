@@ -9,12 +9,14 @@ models:
   code: "qwen2.5-coder:7b"
   embed: "qwen3-embedding:0.6b"
   summarize: "ministral-3:3b"
+  synthesize: "gpt-oss:20b"
   vision: "qwen3-vl:2b"
   fallback:
     classify: "deepseek-r1:1.5b"
     reason: "qwen3:1.7b"
     code: "deepseek-coder:1.3b"
     summarize: "qwen3:1.7b"
+    synthesize: "qwen2.5-coder:14b"
 
 workspace:
   base_dir: "~/.forge/workspaces"

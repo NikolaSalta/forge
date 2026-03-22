@@ -135,24 +135,25 @@ class ModelSelector(
 
     private fun primaryModelForRole(role: ModelRole, models: ModelsConfig): String {
         return when (role) {
-            ModelRole.CLASSIFY  -> models.classify
-            ModelRole.CODE      -> models.code
-            ModelRole.REASON    -> models.reason
-            ModelRole.SUMMARIZE -> models.summarize
-            ModelRole.EMBED     -> models.embed
-            ModelRole.VISION    -> models.vision
+            ModelRole.CLASSIFY   -> models.classify
+            ModelRole.CODE       -> models.code
+            ModelRole.REASON     -> models.reason
+            ModelRole.SUMMARIZE  -> models.summarize
+            ModelRole.SYNTHESIZE -> models.synthesize
+            ModelRole.EMBED      -> models.embed
+            ModelRole.VISION     -> models.vision
         }
     }
 
     private fun fallbackModelForRole(role: ModelRole, fallback: FallbackModels): String? {
         return when (role) {
-            ModelRole.CLASSIFY  -> fallback.classify
-            ModelRole.CODE      -> fallback.code
-            ModelRole.REASON    -> fallback.reason
-            ModelRole.SUMMARIZE -> fallback.summarize
-            // No fallback defined for embed and vision
-            ModelRole.EMBED     -> null
-            ModelRole.VISION    -> null
+            ModelRole.CLASSIFY   -> fallback.classify
+            ModelRole.CODE       -> fallback.code
+            ModelRole.REASON     -> fallback.reason
+            ModelRole.SUMMARIZE  -> fallback.summarize
+            ModelRole.SYNTHESIZE -> fallback.synthesize
+            ModelRole.EMBED      -> null
+            ModelRole.VISION     -> null
         }
     }
 

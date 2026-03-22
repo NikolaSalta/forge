@@ -501,6 +501,7 @@ fun Routing.apiRoutes(
                 "model_code" to config.models.code,
                 "model_embed" to config.models.embed,
                 "model_summarize" to config.models.summarize,
+                "model_synthesize" to config.models.synthesize,
                 "model_vision" to config.models.vision,
                 "workspace_base_dir" to config.workspace.baseDir,
                 "chunk_max_lines" to config.workspace.chunkMaxLines.toString(),

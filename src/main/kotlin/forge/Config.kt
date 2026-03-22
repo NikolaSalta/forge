@@ -18,6 +18,7 @@ data class ModelsConfig(
     val code: String = "qwen2.5-coder:7b",
     val embed: String = "qwen3-embedding:0.6b",
     val summarize: String = "ministral-3:3b",
+    val synthesize: String = "gpt-oss:20b",  // Heavy final planner — on-demand only
     val vision: String = "qwen3-vl:2b",
     val fallback: FallbackModels = FallbackModels()
 )
@@ -26,7 +27,8 @@ data class FallbackModels(
     val classify: String = "deepseek-r1:1.5b",
     val reason: String = "qwen2.5:14b",
     val code: String = "qwen2.5-coder:7b",
-    val summarize: String = "qwen3:1.7b"
+    val summarize: String = "qwen3:1.7b",
+    val synthesize: String = "qwen2.5-coder:14b"  // Fallback if gpt-oss:20b unavailable
 )
 
 data class WorkspaceConfig(
@@ -115,6 +117,7 @@ data class AgentOrchestrationConfig(
         "CODE" to "qwen2.5-coder:14b",
         "EMBED" to "qwen3-embedding:0.6b",
         "SUMMARIZE" to "qwen2.5:14b",
+        "SYNTHESIZE" to "gpt-oss:20b",
         "VISION" to "qwen2.5vl:7b"
     ),
     val preloadOnStartup: Boolean = true,
@@ -229,12 +232,14 @@ data class ForgeConfig(
                     code = modelsMap["code"] as? String ?: "qwen2.5-coder:7b",
                     embed = modelsMap["embed"] as? String ?: "qwen3-embedding:0.6b",
                     summarize = modelsMap["summarize"] as? String ?: "ministral-3:3b",
+                    synthesize = modelsMap["synthesize"] as? String ?: "gpt-oss:20b",
                     vision = modelsMap["vision"] as? String ?: "qwen3-vl:2b",
                     fallback = FallbackModels(
                         classify = fallbackMap["classify"] as? String ?: "deepseek-r1:1.5b",
                         reason = fallbackMap["reason"] as? String ?: "qwen2.5:14b",
                         code = fallbackMap["code"] as? String ?: "qwen2.5-coder:7b",
-                        summarize = fallbackMap["summarize"] as? String ?: "qwen3:1.7b"
+                        summarize = fallbackMap["summarize"] as? String ?: "qwen3:1.7b",
+                        synthesize = fallbackMap["synthesize"] as? String ?: "qwen2.5-coder:14b"
                     )
                 ),
                 workspace = WorkspaceConfig(

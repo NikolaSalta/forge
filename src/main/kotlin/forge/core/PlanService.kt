@@ -146,7 +146,8 @@ ${plan.simplePlan}
 Create a detailed implementation plan:""")
         )
 
-        val response = ollama.chat(config.models.reason, messages)
+        // Use SYNTHESIZE model (gpt-oss:20b) for heavy implementation planning
+        val response = ollama.chat(config.models.synthesize, messages)
         plan.implementationPlan = response.trim()
         return plan
     }

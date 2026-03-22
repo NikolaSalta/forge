@@ -152,10 +152,11 @@ enum class TaskType(
  * Which model role to use for each task.
  */
 enum class ModelRole {
-    CLASSIFY,   // Fast, small model for classification
-    REASON,     // Reasoning model for analysis
-    CODE,       // Code-specialized model
-    SUMMARIZE,  // Summarization model
-    EMBED,      // Embedding model
-    VISION      // Vision/OCR model
+    CLASSIFY,    // Fast, small model for classification
+    REASON,      // Reasoning model for analysis
+    CODE,        // Code-specialized model
+    SUMMARIZE,   // Summarization model
+    SYNTHESIZE,  // Heavy final planner — repo-wide architecture synthesis (on-demand, not always loaded)
+    EMBED,       // Embedding model
+    VISION       // Vision/OCR model
 }

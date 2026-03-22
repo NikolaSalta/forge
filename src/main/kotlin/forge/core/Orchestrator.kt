@@ -267,10 +267,13 @@ class Orchestrator(
                     if (stage.name == "LLM_CALL" && isDeepAnalysis) {
                         // ── Deep multi-pass analysis (module-by-module) ─────
                         executeDeepAnalysis(context, traceChannel, forceReanalyze)
+                    } else if (stage.name == "LLM_CALL" && isTransformationPrompt) {
+                        // ── Synthesis mode: use heavy SYNTHESIZE model ──────
+                        // Transformation/architecture tasks get gpt-oss:20b
+                        context.selectedModel = modelSelector.selectForRole(ModelRole.SYNTHESIZE)
+                        executeStreamingLlmCall(context, traceChannel)
                     } else if (stage.name == "LLM_CALL") {
-                        // ── Single whole-repo LLM call (streaming) ──────────
-                        // Used for: transformation plans, feature requests,
-                        // code generation, and any non-deep-analysis task.
+                        // ── Standard streaming LLM call ─────────────────────
                         executeStreamingLlmCall(context, traceChannel)
                     } else {
                         stage.execute(context)
