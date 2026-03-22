@@ -689,6 +689,34 @@ class Database(workspacePath: Path) {
         }
     }
 
+    /**
+     * Returns distinct top-level directories from indexed files.
+     * E.g., for paths like "src/main/java/Foo.java", "docs/README.md" → ["src", "docs"]
+     */
+    fun getTopLevelDirectories(limit: Int = 40): List<String> {
+        synchronized(lock) {
+            val conn = getConnection()
+            val result = mutableListOf<String>()
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("""
+                    SELECT DISTINCT
+                        CASE
+                            WHEN INSTR(relative_path, '/') > 0 THEN SUBSTR(relative_path, 1, INSTR(relative_path, '/') - 1)
+                            ELSE relative_path
+                        END AS top_dir
+                    FROM files
+                    ORDER BY top_dir
+                    LIMIT $limit
+                """).use { rs ->
+                    while (rs.next()) {
+                        result.add(rs.getString("top_dir"))
+                    }
+                }
+            }
+            return result
+        }
+    }
+
     fun getFilesByCategory(category: String): List<FileRecord> {
         synchronized(lock) {
             val conn = getConnection()

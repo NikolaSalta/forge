@@ -990,13 +990,7 @@ fun Routing.apiRoutes(
             }
 
             val db = webState.database
-            val repoSummary = if (db != null) {
-                val fileCount = db.getFileCount()
-                val modules = db.getModuleCount()
-                "Repository: ${webState.repoPath ?: "unknown"}, $fileCount files, $modules modules"
-            } else {
-                "Repository: ${webState.repoPath ?: "unknown"}"
-            }
+            val repoSummary = buildRichRepoSummary(db, webState.repoPath)
 
             try {
                 val plan = planService.generateSimplePlan(body.query, repoSummary)
@@ -1041,13 +1035,8 @@ fun Routing.apiRoutes(
             when (plan.phase) {
                 forge.core.PlanPhase.SIMPLE_PLAN -> {
                     planService.approveSimplePlan(body.planId)
-                    // Generate implementation plan using index context
-                    val db = webState.database
-                    val indexContext = if (db != null) {
-                        val queryService = forge.index.IndexQueryService(db)
-                        val stats = queryService.getIndexStats()
-                        "Indexed: ${stats.totalEntities} entities, ${stats.totalRelationships} relationships across ${stats.filesByClassification.entries.joinToString { "${it.value} ${it.key}" }}"
-                    } else ""
+                    // Generate implementation plan using rich index context
+                    val indexContext = buildRichRepoSummary(webState.database, webState.repoPath)
 
                     val updated = planService.generateImplementationPlan(body.planId, indexContext)
                     if (updated != null) {
@@ -1136,5 +1125,73 @@ fun Routing.apiRoutes(
                 job.join()
             }
         }
+    }
+}
+
+/**
+ * Builds a rich repository summary from index data for plan generation.
+ * Includes top-level directories, key classes/interfaces, file classifications,
+ * and module structure — so the LLM knows what's actually in the repo.
+ */
+private fun buildRichRepoSummary(db: forge.workspace.Database?, repoPath: String?): String {
+    if (db == null) return "Repository: ${repoPath ?: "unknown"} (not indexed)"
+
+    return buildString {
+        appendLine("## Repository: ${repoPath ?: "unknown"}")
+        appendLine()
+
+        // File classifications
+        val queryService = IndexQueryService(db)
+        val stats = queryService.getIndexStats()
+        appendLine("### Files: ${stats.filesByClassification.values.sum()} total")
+        for ((classification, count) in stats.filesByClassification) {
+            appendLine("  - $classification: $count files")
+        }
+        appendLine()
+
+        // Top-level directories (from indexed files)
+        val topDirs = db.getTopLevelDirectories(limit = 40)
+        if (topDirs.isNotEmpty()) {
+            appendLine("### Top-level directories:")
+            for (dir in topDirs) {
+                appendLine("  - $dir")
+            }
+            appendLine()
+        }
+
+        // Key classes and interfaces (most important entities)
+        val classes = db.searchEntities("class", limit = 5)
+        val interfaces = db.searchEntities("interface", limit = 5)
+        val allEntities = (db.getEntitiesByType("class", 30) + db.getEntitiesByType("interface", 15))
+            .distinctBy { it.name }
+            .take(30)
+
+        if (allEntities.isNotEmpty()) {
+            appendLine("### Key classes and interfaces (from index):")
+            for (entity in allEntities) {
+                val file = db.getFileById(entity.fileId)
+                val sig = if (!entity.signature.isNullOrBlank()) " — ${entity.signature.take(80)}" else ""
+                appendLine("  - ${entity.entityType} `${entity.name}` in ${file?.relativePath ?: "?"}$sig")
+            }
+            appendLine()
+        }
+
+        // Modules if discovered
+        val moduleCount = db.getModuleCount()
+        if (moduleCount > 0) {
+            appendLine("### Modules: $moduleCount discovered")
+            val modules = db.getAllModules()
+            for (m in modules.take(20)) {
+                appendLine("  - ${m.name} (${m.moduleType ?: "unknown"}, ${m.fileCount} files)")
+            }
+            appendLine()
+        }
+
+        // Entity counts
+        appendLine("### Index totals:")
+        appendLine("  - Entities: ${stats.totalEntities}")
+        appendLine("  - Relationships: ${stats.totalRelationships}")
+        appendLine("  - Lines indexed: ${stats.totalLinesIndexed}")
+        appendLine("  - Dependencies: ${stats.totalDependencyEdges}")
     }
 }

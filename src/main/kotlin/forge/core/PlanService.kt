@@ -48,20 +48,26 @@ class PlanService(
     suspend fun generateSimplePlan(query: String, repoSummary: String): PlanState {
         val planId = "plan-${UUID.randomUUID().toString().take(8)}"
 
+        // Truncate repo summary if too long to avoid timeout
+        val truncatedSummary = if (repoSummary.length > 8000) repoSummary.take(8000) + "\n..." else repoSummary
+
         val messages = listOf(
             ChatMessage("system", """You are a software architect assistant.
 The user has a request about a code repository. Your job is to convert their request into a clear, simple, numbered plan.
 
-Rules:
-- Write 3-8 numbered steps maximum
-- Each step should be one clear action
-- Use simple language
-- Reference specific parts of the project when relevant
+CRITICAL RULES:
+- Write 8-12 numbered steps
+- Each step must be grounded in the ACTUAL repository structure shown below
+- Reference REAL directories, files, classes, and modules from the repository context
+- Do NOT invent files, classes, or modules that don't exist in the repository
+- If the repository is a collection of examples/demos, say so explicitly
+- Do NOT assume the repository is something it's not
+- Include a testing strategy step
+- Include a migration/transformation step if applicable
 - Do NOT write code — only describe what needs to be done
-- Do NOT explain why — just list the steps
 
-Repository context:
-$repoSummary"""),
+REPOSITORY STRUCTURE (from project index — these are REAL files and classes):
+$truncatedSummary"""),
             ChatMessage("user", "Convert this request into a step-by-step plan:\n\n$query")
         )
 
@@ -113,20 +119,25 @@ Write the updated plan:""")
         val plan = activePlans[planId] ?: return null
         plan.phase = PlanPhase.IMPLEMENTATION_PLAN
 
-        val messages = listOf(
-            ChatMessage("system", """You are a senior software engineer creating an implementation plan.
-Given an approved high-level plan and project context, create a detailed implementation plan.
+        // Truncate index context if too long
+        val truncatedContext = if (indexContext.length > 8000) indexContext.take(8000) + "\n..." else indexContext
 
-Rules:
-- For each step, specify which files to modify or create
-- Reference real class names, method names, and file paths from the project
+        val messages = listOf(
+            ChatMessage("system", """You are a senior software engineer creating a detailed implementation plan.
+Given an approved high-level plan and REAL project structure, create a detailed implementation plan.
+
+CRITICAL RULES:
+- For each step, specify which REAL files to modify or create (use actual paths from the project)
+- Reference REAL class names, method names from the project index below
+- Do NOT invent classes or files that don't exist — only reference what's actually in the index
+- If a new file needs to be created, say so explicitly and explain where it goes
 - Include the order of changes (what depends on what)
 - Note any risks or decisions that need attention
-- Include a verification step for each change
-- Do NOT write full code — write pseudocode or describe changes
+- Include a verification/testing step for each major change
+- Write specific pseudocode for complex changes
 
-Project context (from index):
-$indexContext"""),
+REAL PROJECT STRUCTURE (from index — these files and classes actually exist):
+$truncatedContext"""),
             ChatMessage("user", """Original request: ${plan.originalQuery}
 
 Approved plan:
